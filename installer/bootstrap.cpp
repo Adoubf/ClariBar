@@ -14,10 +14,10 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int) {
     try {
         // Set the child installer environment before its self-extraction starts.
         // Do not modify the user's or machine's persistent environment variables.
-        auto root=std::filesystem::path(L"E:\\haoyue\\cache\\claribar\\temp\\installers");
-        if(GetDriveTypeW(L"E:\\")==DRIVE_NO_ROOT_DIR) {
-            wchar_t temporary[32768]{};GetTempPathW(32768,temporary);root=std::filesystem::path(temporary)/L"ClariBar-installers";
-        }
+        wchar_t temporary[32768]{};
+        DWORD length=GetTempPathW(32768,temporary);
+        if(!length || length>=32768)return Failure(L"无法确定安装缓存目录。",ERROR_PATH_NOT_FOUND);
+        auto root=std::filesystem::path(temporary)/L"ClariBar-installers";
         GUID nonce{};if(FAILED(CoCreateGuid(&nonce)))return Failure(L"无法创建安装会话。",ERROR_GEN_FAILURE);
         wchar_t id[40]{};StringFromGUID2(nonce,id,40);directory=root/id;
         std::filesystem::create_directories(directory);
@@ -27,7 +27,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR arguments,int) {
         auto bytes=SizeofResource(instance,resource);auto data=LockResource(LoadResource(instance,resource));
         auto setup=directory/L"ClariBar-Installer.exe";
         HANDLE file=CreateFileW(setup.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
-        if(file==INVALID_HANDLE_VALUE)return Failure(L"无法写入 E 盘安装缓存。",GetLastError());
+        if(file==INVALID_HANDLE_VALUE)return Failure(L"无法写入安装缓存。",GetLastError());
         DWORD written{};bool complete=WriteFile(file,data,bytes,&written,nullptr)&&written==bytes;CloseHandle(file);
         if(!complete)return Failure(L"安装数据写入不完整。",GetLastError());
         std::wstring command=L"\""+setup.wstring()+L"\" "+arguments;

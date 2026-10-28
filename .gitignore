@@ -78,3 +78,5 @@ TestResults/
 
 # Keep the WinUI application source despite the executable *.app rule.
 !src/ClariBar.App/
+.build/
+.claribar.local.ps1

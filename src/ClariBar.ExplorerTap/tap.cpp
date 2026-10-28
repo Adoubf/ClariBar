@@ -23,6 +23,7 @@
 #include <functional>
 #include <cmath>
 #include <limits>
+#include <filesystem>
 #include <winrt/Windows.UI.Text.h>
 #include "../ClariBar.Native/explorer_protocol.h"
 #include "../ClariBar.Native/text_ink.h"
@@ -35,7 +36,14 @@ using claribar::ExplorerConfig;
 using claribar::ExplorerStatus;
 namespace {
 void BootstrapLog(const std::wstring& value) noexcept {
-    HANDLE file=CreateFileW(L"E:\\haoyue\\cache\\claribar\\logs\\tap-bootstrap.log",FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+    HMODULE module{};
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&BootstrapLog),&module))return;
+    wchar_t modulePath[32768]{};
+    DWORD length=GetModuleFileNameW(module,modulePath,32768);
+    if(!length || length>=32768)return;
+    auto logPath=std::filesystem::path(modulePath).parent_path()/L"tap-bootstrap.log";
+    HANDLE file=CreateFileW(logPath.c_str(),FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if(file==INVALID_HANDLE_VALUE)return;
     auto line=L"PID "+std::to_wstring(GetCurrentProcessId())+L" TID "+std::to_wstring(GetCurrentThreadId())+L" "+value+L"\r\n";
     DWORD bytes{};WriteFile(file,line.data(),static_cast<DWORD>(line.size()*sizeof(wchar_t)),&bytes,nullptr);CloseHandle(file);

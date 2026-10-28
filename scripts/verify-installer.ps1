@@ -1,6 +1,9 @@
-﻿param([string]$Installer='E:\haoyue\cache\claribar\artifacts\ClariBar\releases\ClariBar-Setup-0.6.1-x64.exe',[string]$ExistingTestRoot)
+﻿param([string]$Installer,[string]$ExistingTestRoot)
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
+if(!$Installer){$Installer="$env:CLARIBAR_ROOT\artifacts\ClariBar\releases\ClariBar-Setup-0.6.2-x64.exe"}
+$registered=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{93FDC1C2-EB8E-48A4-9CF0-F59AEB645816}_is1' -ErrorAction SilentlyContinue
+if($registered -and !$ExistingTestRoot){throw 'Run the install/uninstall suite in an isolated Windows user profile without an existing ClariBar installation.'}
 $testRoot=if($ExistingTestRoot){$ExistingTestRoot}else{"$env:CLARIBAR_ROOT\temp\installer-check-$(Get-Date -Format yyyyMMdd-HHmmss)"}
 $app="$testRoot\app"
 $data="$testRoot\运行数据"

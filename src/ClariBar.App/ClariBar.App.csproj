@@ -10,8 +10,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.6.1</Version>
-    <ApplicationIcon>..\..\docs\ClariBar.ico</ApplicationIcon>
+    <Version>0.6.2</Version>
+    <ApplicationIcon>..\..\assets\branding\ClariBar.ico</ApplicationIcon>
     <AssemblyName>ClariBar</AssemblyName>
     <Authors>Haoyue</Authors>
     <Company>Haoyue</Company>
@@ -22,7 +22,7 @@
   <ItemGroup>
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\assets\branding\claribar-256.png" Link="Assets\ClariBar.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="..\..\docs\ClariBar.ico" Link="ClariBar.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\branding\ClariBar.ico" Link="ClariBar.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <ProjectReference Include="..\ClariBar.Core\ClariBar.Core.csproj" />
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />

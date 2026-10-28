@@ -858,7 +858,7 @@ public sealed partial class MainWindow : Window
             taskbar.Refresh();
             File.WriteAllText(Path.ChangeExtension(path,"tree.txt"),Native.ReadTaskbarTree());
             File.WriteAllText(path, JsonSerializer.Serialize(new
-            { version = "0.6.1", system = Environment.OSVersion.VersionString, connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
+            { version = "0.6.2", system = Environment.OSVersion.VersionString, connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
                 new JsonSerializerOptions(Wire.Json) { WriteIndented = true }));
             _ = MessageAsync("诊断已导出", path);
         }
@@ -992,7 +992,7 @@ public sealed partial class MainWindow : Window
             commonSensors=SensorCatalog.Common(snapshot),network=snapshot.Network,capabilities=snapshot.Capabilities,sensorControls=sensorControlsVerification,
             taskbarCheck=Environment.GetCommandLineArgs().Contains("--taskbar-check"),taskbar=taskbar.Status,
             installedFonts=fontFamilies?.Length,adaptiveWidth=settings.MonitorAutoWidth,fontFamily=settings.MonitorFontFamily,bold=settings.MonitorBold,
-            sourceRoot = @"E:\haoyue\myproject\home\ClariBar", configPath = store.FilePath
+            repository = ProjectRepository, configPath = store.FilePath
         }, new JsonSerializerOptions(Wire.Json) { WriteIndented = true }));
         await QuitAsync();
     }

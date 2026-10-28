@@ -49,7 +49,7 @@
       <TextBlock Text="你的任务栏，你的节奏" FontSize="13" FontWeight="SemiBold"/>
       <TextBlock Text="外观与系统状态，尽在一处" Style="{StaticResource SecondaryText}"/>
      </StackPanel>
-     <TextBlock x:Name="FooterVersion" Text="版本 0.6.1" Style="{StaticResource SecondaryText}" ToolTipService.ToolTip="澄栏 ClariBar 0.6.1"/>
+     <TextBlock x:Name="FooterVersion" Text="版本 0.6.2" Style="{StaticResource SecondaryText}" ToolTipService.ToolTip="澄栏 ClariBar 0.6.2"/>
     </StackPanel>
    </NavigationView.PaneFooter>
    <Border x:Name="PageSurface" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="12" Margin="0,8,8,8">

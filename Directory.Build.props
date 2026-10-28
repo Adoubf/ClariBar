@@ -1,11 +1,14 @@
 <Project>
   <PropertyGroup>
-    <ClariBarRoot>E:\haoyue\cache\claribar\</ClariBarRoot>
+    <ClariBarRoot Condition="'$(ClariBarRoot)' == '' and '$(CLARIBAR_ROOT)' != ''">$(CLARIBAR_ROOT)\</ClariBarRoot>
+    <ClariBarRoot Condition="'$(ClariBarRoot)' == ''">$(MSBuildThisFileDirectory).build\</ClariBarRoot>
+    <ClariBarRoot>$([MSBuild]::EnsureTrailingSlash('$(ClariBarRoot)'))</ClariBarRoot>
     <BaseIntermediateOutputPath>$(ClariBarRoot)build\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
     <BaseOutputPath>$(ClariBarRoot)build\bin\$(MSBuildProjectName)\</BaseOutputPath>
     <RestorePackagesPath>$(ClariBarRoot)caches\nuget\packages</RestorePackagesPath>
     <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>
   </PropertyGroup>
   <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.vcxproj'">
     <IntDir>$(ClariBarRoot)build\obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>

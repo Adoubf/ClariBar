@@ -1,2 +1,2 @@
 # Preserve original third-party license formatting.
-docs/licenses/* -whitespace
+licenses/* -whitespace

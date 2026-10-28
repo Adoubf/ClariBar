@@ -5,7 +5,7 @@ if(NOT EXISTS "${INNER_SETUP}")
 endif()
 file(TO_CMAKE_PATH "${INNER_SETUP}" INNER_SETUP)
 get_filename_component(SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
-set(BRAND_ICON "${SOURCE_ROOT}/docs/ClariBar.ico")
+set(BRAND_ICON "${SOURCE_ROOT}/assets/branding/ClariBar.ico")
 set(BOOTSTRAP_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/bootstrap.manifest")
 configure_file(bootstrap.rc.in "${CMAKE_CURRENT_BINARY_DIR}/bootstrap.rc" @ONLY)
 set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/bootstrap.rc" PROPERTIES

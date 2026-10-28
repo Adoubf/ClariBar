@@ -55,7 +55,7 @@ internal static class AppPaths
     {
         string configured=Path.Combine(AppContext.BaseDirectory,"runtime-path.txt");
         if(File.Exists(configured))return Path.GetFullPath(File.ReadAllText(configured).Trim());
-        return Environment.GetEnvironmentVariable("CLARIBAR_ROOT")??@"E:\haoyue\cache\claribar";
+        return Environment.GetEnvironmentVariable("CLARIBAR_ROOT")??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClariBar");
     }
     public static void Initialize()
     {

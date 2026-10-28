@@ -6,7 +6,7 @@ using ClariBar.App;
 
 if(args.Length<2)throw new ArgumentException("Pass native DLL directory and immutable TAP DLL path.");
 NativeLibrary.SetDllImportResolver(typeof(Native).Assembly,(name,assembly,path)=>name=="ClariBar.Native.dll"?NativeLibrary.Load(Path.Combine(args[0],name)):0);
-string cache=Environment.GetEnvironmentVariable("CLARIBAR_ROOT")??@"E:\haoyue\cache\claribar";
+string cache=Environment.GetEnvironmentVariable("CLARIBAR_ROOT")??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClariBar");
 Directory.CreateDirectory(Path.Combine(cache,"logs"));
 NativeMethods.Callback callback=_=>{};
 NativeMethods.Start(callback);

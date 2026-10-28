@@ -1,12 +1,12 @@
-﻿#define AppVersion "0.6.1"
+﻿#define AppVersion "0.6.2"
 #ifndef SourceRoot
-  #define SourceRoot "E:\haoyue\myproject\home\ClariBar"
+  #define SourceRoot AddBackslash(SourcePath) + ".."
 #endif
 #ifndef PayloadDir
-  #define PayloadDir "E:\haoyue\cache\claribar\build\package\0.6.1\payload"
+  #error "Use scripts/package.ps1 to specify PayloadDir."
 #endif
 #ifndef ReleaseDir
-  #define ReleaseDir "E:\haoyue\cache\claribar\artifacts\ClariBar\releases"
+  #error "Use scripts/package.ps1 to specify ReleaseDir."
 #endif
 
 [Setup]
@@ -19,7 +19,7 @@ AppPublisherURL=https://github.com/Adoubf/ClariBar
 AppSupportURL=https://github.com/Adoubf/ClariBar/issues
 AppUpdatesURL=https://github.com/Adoubf/ClariBar/releases
 AppComments=Windows 11 任务栏与实时资源监控
-DefaultDirName=E:\haoyue\cache\claribar\programs\ClariBar
+DefaultDirName={localappdata}\Programs\ClariBar
 DefaultGroupName=澄栏 ClariBar
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
@@ -32,7 +32,7 @@ WizardStyle=modern dynamic
 WizardSizePercent=112
 WizardImageFile={#SourceRoot}\assets\branding\installer-banner.bmp
 WizardSmallImageFile={#SourceRoot}\assets\branding\claribar-64.png
-SetupIconFile={#SourceRoot}\docs\ClariBar.ico
+SetupIconFile={#SourceRoot}\assets\branding\ClariBar.ico
 UninstallDisplayIcon={app}\ClariBar.exe
 UninstallDisplayName=澄栏 ClariBar
 OutputDir={#ReleaseDir}
@@ -119,7 +119,7 @@ begin
     '选择配置、日志和临时文件的保存位置',
     '已有颜色、字体和监控指标会继续使用。卸载程序时保留这些个人设置。', False, '');
   DataPage.Add('运行数据目录：');
-  PreviousRoot := GetPreviousData('DataRoot', 'E:\haoyue\cache\claribar');
+  PreviousRoot := GetPreviousData('DataRoot', ExpandConstant('{localappdata}\ClariBar'));
   DataPage.Values[0] := ExpandConstant('{param:DATAROOT|' + PreviousRoot + '}');
 end;
 

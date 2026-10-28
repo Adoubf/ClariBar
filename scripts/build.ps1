@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
 $sourceRoot = Split-Path $PSScriptRoot
 $cache = $env:CLARIBAR_ROOT
-$artifact = "$cache\artifacts\ClariBar\0.6.1"
+$artifact = "$cache\artifacts\ClariBar\0.6.2"
 Set-Location $sourceRoot
 if (Get-Process -Name ClariBar -ErrorAction SilentlyContinue) {
     throw '请先从系统托盘菜单彻底退出澄栏，再重新构建。'
@@ -14,13 +14,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Native configure failed' }
     & cmake --build "$cache\build\claribar-native"
     if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
-    foreach ($project in @('ClariBar.SensorBroker','ClariBar.App')) {
-        & dotnet build "$sourceRoot\src\$project\$project.csproj" -c Release --nologo
-        if ($LASTEXITCODE -ne 0) { throw "Managed build failed: $project" }
-    }
     [void](New-Item -ItemType Directory -Force -Path $artifact,"$artifact\broker")
-    Copy-Item "$cache\build\bin\ClariBar.App\Release\net10.0-windows10.0.26100.0\win-x64\*" $artifact -Recurse -Force
-    Copy-Item "$cache\build\bin\ClariBar.SensorBroker\Release\net10.0-windows\*" "$artifact\broker" -Recurse -Force
+    foreach ($project in @('ClariBar.SensorBroker','ClariBar.App')) {
+        $destination=if($project -eq 'ClariBar.App'){$artifact}else{"$artifact\broker"}
+        & dotnet publish "$sourceRoot\src\$project\$project.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $destination --nologo
+        if ($LASTEXITCODE -ne 0) { throw "Managed publish failed: $project" }
+    }
     Copy-Item "$cache\build\claribar-native\ClariBar.Native.dll" $artifact -Force
     $tap="$cache\build\claribar-native\ExplorerTap\ClariBar.ExplorerTap.dll"
     $tapHash=(Get-FileHash -LiteralPath $tap -Algorithm SHA256).Hash.Substring(0,16)
@@ -28,10 +27,10 @@ try {
     [void](New-Item -ItemType Directory -Force -Path $adapter)
     if(!(Test-Path "$adapter\ClariBar.ExplorerTap.dll")){Copy-Item $tap "$adapter\ClariBar.ExplorerTap.dll"}
     "$adapter\ClariBar.ExplorerTap.dll" | Set-Content "$artifact\adapter-path.txt" -Encoding UTF8
-    Copy-Item "$sourceRoot\docs\ClariBar.ico" $artifact -Force
+    Copy-Item "$sourceRoot\assets\branding\ClariBar.ico" $artifact -Force
     Copy-Item "$sourceRoot\THIRD-PARTY-NOTICES.md" $artifact -Force
     [void](New-Item -ItemType Directory -Force -Path "$artifact\licenses")
-    Copy-Item "$sourceRoot\docs\licenses\*" "$artifact\licenses" -Recurse -Force
+    Copy-Item "$sourceRoot\licenses\*" "$artifact\licenses" -Recurse -Force
     Copy-Item "$sourceRoot\README.md" $artifact -Force
     if ($Check) {
         $project="$sourceRoot\tests\ClariBar.Checks\ClariBar.Checks.csproj"

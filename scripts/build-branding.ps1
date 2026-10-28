@@ -36,7 +36,7 @@ foreach($size in ($sizes+512+1024)){
  $bitmap=Render-Logo $size;$path=Join-Path $output "claribar-$size.png";Save-Bitmap $bitmap $path
  if($size -le 256){$frames+=,@([IO.File]::ReadAllBytes($path),$size)}
 }
-$ico=[IO.BinaryWriter]::new([IO.File]::Create((Join-Path $root 'docs\ClariBar.ico')))
+$ico=[IO.BinaryWriter]::new([IO.File]::Create((Join-Path $root 'assets\branding\ClariBar.ico')))
 try{
  $ico.Write([uint16]0);$ico.Write([uint16]1);$ico.Write([uint16]$frames.Count);$offset=6+16*$frames.Count
  foreach($frame in $frames){$size=[int]$frame[1];$bytes=[byte[]]$frame[0];$dimension=if($size -eq 256){0}else{$size};$ico.Write([byte]$dimension);$ico.Write([byte]$dimension);$ico.Write([byte]0);$ico.Write([byte]0);$ico.Write([uint16]1);$ico.Write([uint16]32);$ico.Write([uint32]$bytes.Length);$ico.Write([uint32]$offset);$offset+=$bytes.Length}

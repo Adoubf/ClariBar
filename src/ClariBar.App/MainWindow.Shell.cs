@@ -12,7 +12,7 @@ namespace ClariBar.App;
 
 public sealed partial class MainWindow
 {
-    private const string AppVersion="0.6.1";
+    private const string AppVersion="0.6.2";
     private readonly List<Action<double>> responsiveLayouts=[];
     private readonly UISettings uiPreferences=new();
     private Storyboard? pageMotion,paneMotion,themeMotion;

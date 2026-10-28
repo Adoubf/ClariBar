@@ -1,7 +1,7 @@
 ﻿param([switch]$SmokeTest,[switch]$Development,[switch]$Elevated,[switch]$Diagnostics,[ValidateSet("overview","taskbar","sensors","colors","general","about")][string]$Page="overview")
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
-$artifact = "$env:CLARIBAR_ROOT\artifacts\ClariBar\0.6.1"
+$artifact = "$env:CLARIBAR_ROOT\artifacts\ClariBar\0.6.2"
 if(!$SmokeTest -and !$Development){
  $uninstall='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{93FDC1C2-EB8E-48A4-9CF0-F59AEB645816}_is1'
  $installed=Get-ItemProperty -LiteralPath $uninstall -ErrorAction SilentlyContinue

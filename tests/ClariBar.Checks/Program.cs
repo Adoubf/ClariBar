@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json;
 using ClariBar.Core;
 
-string cache = Environment.GetEnvironmentVariable("CLARIBAR_ROOT") ?? @"E:\haoyue\cache\claribar";
+string cache = Environment.GetEnvironmentVariable("CLARIBAR_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClariBar");
 if(args.FirstOrDefault()=="--runtime")
 {
     var live=JsonSerializer.Deserialize<SensorSnapshot>(File.ReadAllText(Path.Combine(cache,"logs","claribar-current-sensors.json")),Wire.Json)!;
