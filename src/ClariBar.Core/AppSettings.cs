@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.Text.Json;
 
 namespace ClariBar.Core;
@@ -6,6 +7,7 @@ public sealed class AppSettings
 {
     public int Version { get; set; } = 1;
     public string Theme { get; set; } = "System";
+    public string Language { get; set; } = "System";
     public bool NavigationCollapsed {get;set;}
     public int IntervalMs { get; set; } = 1000;
     public bool HardwareAccessEnabled {get;set;}
@@ -45,6 +47,7 @@ public sealed class AppSettings
 
     public void Normalize()
     {
+        Language = Localizer.NormalizePreference(Language);
         IntervalMs = Math.Clamp(IntervalMs, 500, 5000);
         MonitorOpacity = Math.Clamp(MonitorOpacity, 30, 100);
         MonitorFontSize = Math.Clamp(MonitorFontSize, 8, 24);
@@ -89,14 +92,14 @@ public sealed class SettingsStore(string root)
         try
         {
             var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Wire.Json)
-                ?? throw new JsonException("配置为空");
-            if (settings.Version != 1) throw new JsonException("不支持的配置版本");
+                ?? throw new JsonException(L.T("Settings are empty"));
+            if (settings.Version != 1) throw new JsonException(L.T("Unsupported settings version"));
             settings.Normalize();
             return settings;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            LoadWarning = $"配置无法读取，已使用默认值：{ex.Message}";
+            LoadWarning = L.F("Could not read settings. Defaults are in use: {0}", ex.Message);
             // Keep the original file for recovery; never replace malformed input on load.
             return new();
         }

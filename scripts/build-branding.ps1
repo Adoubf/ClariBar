@@ -49,7 +49,7 @@ $ctx.DrawRectangle([Windows.Media.LinearGradientBrush]::new((Color '#062D43'),(C
 $ctx.PushTransform([Windows.Media.TranslateTransform]::new(28,78));$ctx.PushTransform([Windows.Media.ScaleTransform]::new(272/512.0,272/512.0));$ctx.DrawDrawing($drawing);$ctx.Pop();$ctx.Pop()
 $face=[Windows.Media.Typeface]::new('Microsoft YaHei UI')
 function Label([string]$value,[double]$size,[double]$x,[double]$y,[string]$color){$text=[Windows.Media.FormattedText]::new($value,[Globalization.CultureInfo]::GetCultureInfo('zh-CN'),[Windows.FlowDirection]::LeftToRight,$face,$size,(Brush $color),1);$ctx.DrawText($text,[Windows.Point]::new($x,$y))}
-Label '澄栏' 42 38 366 '#FFFFFF';Label 'ClariBar' 27 39 425 '#B8FFEB';Label '清晰掌握你的桌面' 18 39 516 '#D4E8EF'
+Label 'ClariBar' 42 38 366 '#FFFFFF';Label 'Windows 11' 27 39 425 '#B8FFEB';Label 'Your taskbar, your way' 18 39 516 '#D4E8EF'
 $ctx.Close();$bitmap=[Windows.Media.Imaging.RenderTargetBitmap]::new(328,628,96,96,[Windows.Media.PixelFormats]::Pbgra32);$bitmap.Render($visual);Save-Bitmap $bitmap (Join-Path $output 'installer-banner.bmp') -Bmp
 # Review sheet shows both backgrounds and actual small icon sizes.
 $visual=[Windows.Media.DrawingVisual]::new();$ctx=$visual.RenderOpen()

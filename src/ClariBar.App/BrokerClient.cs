@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Cryptography;
@@ -33,8 +34,8 @@ internal sealed class BrokerClient : IAsyncDisposable
         try
         {
             StateChanged?.Invoke(new(elevate?BrokerPhase.Authorizing:BrokerPhase.Connecting,
-                elevate?"正在等待 Windows 硬件访问授权…":"正在连接采集进程…"));
-            if (!File.Exists(broker)) throw new FileNotFoundException("缺少采集程序，请使用完整构建目录启动。", broker);
+                elevate?L.T("Waiting for Windows hardware authorization…"):L.T("Connecting to sensors…")));
+            if (!File.Exists(broker)) throw new FileNotFoundException(L.T("Sensor broker is missing. Start ClariBar from its complete application directory."), broker);
             var info = new ProcessStartInfo(appHost?broker:AppPaths.Dotnet)
             {
                 Arguments=appHost?$"--pipe {name} --token {token}":$"\"{broker}\" --pipe {name} --token {token}",
@@ -45,12 +46,12 @@ internal sealed class BrokerClient : IAsyncDisposable
             };
             if (elevate) info.Verb = "runas";
             process = await Task.Run(() => Process.Start(info), stopping.Token)
-                ?? throw new IOException("无法启动硬件采集进程。");
-            StateChanged?.Invoke(new(BrokerPhase.Connecting,"采集器已启动，正在建立连接…"));
+                ?? throw new IOException(L.T("Could not start the sensor process."));
+            StateChanged?.Invoke(new(BrokerPhase.Connecting,L.T("Sensor process started. Establishing a connection…")));
             pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut,
                 PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             await pipe.ConnectAsync(40000, stopping.Token);
-            StateChanged?.Invoke(new(BrokerPhase.Reading,"连接已建立，正在读取硬件数据…"));
+            StateChanged?.Invoke(new(BrokerPhase.Reading,L.T("Connected. Reading hardware data…")));
             using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 65536, true);
             await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 65536, true) { AutoFlush = true };
             while (!stopping.IsCancellationRequested)
@@ -59,11 +60,11 @@ internal sealed class BrokerClient : IAsyncDisposable
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
                 timeout.CancelAfter(TimeSpan.FromSeconds(15));
                 var line = await reader.ReadLineAsync(timeout.Token);
-                if (line is null) throw new IOException("采集进程已断开。");
-                if (line.Length > Wire.MaximumLineLength) throw new IOException("采集数据超过限制。");
+                if (line is null) throw new IOException(L.T("The sensor process disconnected."));
+                if (line.Length > Wire.MaximumLineLength) throw new IOException(L.T("Sensor response exceeds the size limit."));
                 var snapshot = JsonSerializer.Deserialize<SensorSnapshot>(line, Wire.Json)
-                    ?? throw new IOException("采集数据为空。");
-                if (snapshot.Version != SensorSnapshot.ProtocolVersion) throw new IOException("采集协议版本不匹配。");
+                    ?? throw new IOException(L.T("Empty sensor response."));
+                if (snapshot.Version != SensorSnapshot.ProtocolVersion) throw new IOException(L.T("Sensor protocol version mismatch."));
                 Sample?.Invoke(snapshot);
                 await Task.Delay(Math.Clamp(IntervalMs, 500, 5000), stopping.Token);
             }
@@ -73,7 +74,7 @@ internal sealed class BrokerClient : IAsyncDisposable
         {
             bool cancelled=ex is System.ComponentModel.Win32Exception { NativeErrorCode: 1223 };
             StateChanged?.Invoke(new(cancelled?BrokerPhase.Cancelled:BrokerPhase.Failed,
-                cancelled?"已取消硬件访问授权，继续使用基础监控。":$"连接失败：{ex.Message}"));
+                cancelled?L.T("Hardware authorization was cancelled. Basic monitoring remains available."):L.F("Connection failed: {0}", ex.Message)));
             Failed?.Invoke(cancelled);
         }
         finally { pipe?.Dispose(); }

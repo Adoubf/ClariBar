@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -11,14 +12,14 @@ public sealed record SensorReading(string Id, string HardwareId, string Hardware
     [JsonIgnore] public string DisplayValue => IsValid
         ? $"{Value!.Value:0.##}{(Unit.Length > 0 ? " " + Unit : "")}" : "—";
     [JsonIgnore] public string StatusText => Status switch
-    { "valid"=>"可用", "invalid"=>"无效读数", "stale"=>"数据过期", "requires_admin"=>"需硬件授权",
-      "warming"=>"采样中", "offline"=>"未连接", "unsupported"=>"接口未提供", _=>"未返回读数" };
+    { "valid"=>L.T("Available"), "invalid"=>L.T("Invalid reading"), "stale"=>L.T("Stale data"), "requires_admin"=>L.T("Needs access"),
+      "warming"=>L.T("Sampling"), "offline"=>L.T("Disconnected"), "unsupported"=>L.T("Not exposed"), _=>L.T("No reading") };
     [JsonIgnore] public string Category => HardwareType switch
     {
         "Cpu" => "CPU", "GpuIntel" or "GpuNvidia" or "GpuAmd" => "GPU",
-        "Storage" => "磁盘", "Network" => "网络", "Memory" => "内存",
-        "SuperIO" or "Motherboard" or "EmbeddedController" or "Cooler" => "主板与风扇",
-        "Battery" => "电池", "Psu" => "电源", _ => "其他设备"
+        "Storage" => L.T("Disk"), "Network" => L.T("Network"), "Memory" => L.T("Memory"),
+        "SuperIO" or "Motherboard" or "EmbeddedController" or "Cooler" => L.T("Motherboard & fans"),
+        "Battery" => L.T("Battery"), "Psu" => L.T("Power supply"), _ => L.T("Other devices")
     };
 }
 

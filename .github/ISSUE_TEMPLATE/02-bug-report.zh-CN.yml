@@ -1,0 +1,96 @@
+name: 错误报告（简体中文）
+description: 报告运行异常、界面、任务栏或传感器问题。
+title: '[问题] '
+body:
+- type: markdown
+  attributes:
+    value: 请尽量填写完整信息。标为必填的字段不能为空；截图和日志可选。上传内容前，请遮挡个人路径、账号、令牌等敏感信息。
+- type: input
+  id: app_version
+  attributes:
+    label: ClariBar 版本
+    description: 在“关于”页面查看，请填写实际使用的版本。
+    placeholder: 0.7.0
+  validations:
+    required: true
+- type: input
+  id: windows_version
+  attributes:
+    label: Windows 版本和内部版本号
+    description: 运行 winver，填写版本和 OS 内部版本号。
+    placeholder: Windows 11 24H2, OS build 26100.x
+  validations:
+    required: true
+- type: dropdown
+  id: area
+  attributes:
+    label: 受影响的功能
+    multiple: true
+    options:
+    - 任务栏透明或背景
+    - 任务栏内嵌监控
+    - 硬件与资源监控
+    - 网速或网卡选择
+    - 文字与图标配色
+    - 界面与交互
+    - 语言与翻译
+    - 安装、升级或卸载
+    - 其他
+  validations:
+    required: true
+- type: textarea
+  id: steps
+  attributes:
+    label: 复现步骤
+    description: 从打开程序开始说明操作顺序；偶发问题请注明发生频率。
+    placeholder: '1. 打开……
+
+      2. 点击或修改……
+
+      3. 出现……'
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: 预期结果
+    placeholder: 你期望程序如何表现？
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: 实际结果
+    description: 请提供具体表现，以及界面显示的错误或状态。
+  validations:
+    required: true
+- type: textarea
+  id: hardware
+  attributes:
+    label: 硬件信息（选填）
+    description: 传感器相关问题请补充 CPU、GPU、主板和相关磁盘型号，无需提供序列号。
+- type: dropdown
+  id: authorization
+  attributes:
+    label: 硬件访问状态（选填）
+    options:
+    - 未授权
+    - 已授权并连接
+    - 授权已取消或失败
+    - 正在连接或连接已断开
+    - 不适用或不确定
+- type: input
+  id: displays
+  attributes:
+    label: 显示器与缩放（选填）
+    placeholder: 例如：2 个显示器，2560×1440 / 150%，1920×1080 / 100%
+- type: input
+  id: taskbar_tools
+  attributes:
+    label: 其他任务栏修改工具（选填）
+    placeholder: 名称和版本，未使用请填写“无”
+- type: textarea
+  id: attachments
+  attributes:
+    label: 截图、日志与补充说明（选填）
+    description: 可以拖入截图，或粘贴相关日志片段。请先遮挡敏感信息。

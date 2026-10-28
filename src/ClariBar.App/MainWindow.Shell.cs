@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -12,7 +13,7 @@ namespace ClariBar.App;
 
 public sealed partial class MainWindow
 {
-    private const string AppVersion="0.6.2";
+    private const string AppVersion="0.7.0";
     private readonly List<Action<double>> responsiveLayouts=[];
     private readonly UISettings uiPreferences=new();
     private Storyboard? pageMotion,paneMotion,themeMotion;
@@ -25,6 +26,7 @@ public sealed partial class MainWindow
 
     private void InitializeShell()
     {
+        LocalizeShell();
         ExtendsContentIntoTitleBar=true;SetTitleBar(ShellTitleBar);
         AppWindow.TitleBar.PreferredHeightOption=TitleBarHeightOption.Tall;
         AppWindow.TitleBar.IconShowOptions=IconShowOptions.HideIconAndSystemMenu;
@@ -44,7 +46,7 @@ public sealed partial class MainWindow
     private void AddShortcut(VirtualKey key,VirtualKeyModifiers modifiers,Action action)
     {
         var shortcut=new KeyboardAccelerator {Key=key,Modifiers=modifiers};
-        shortcut.Invoked+=(_,args)=>{action();args.Handled=true;};Root.KeyboardAccelerators.Add(shortcut);
+        shortcut.Invoked+=(_,args)=>{action();args.Handled=true;};Root.KeyboardAccelerators.Add(shortcut);ToolTipService.SetToolTip(Root,null);
     }
     private void ApplyChromeColors()
     {
@@ -79,7 +81,7 @@ public sealed partial class MainWindow
     private void UpdatePaneAppearance()
     {
         PaneIntro.Visibility=Nav.IsPaneOpen?Visibility.Visible:Visibility.Collapsed;
-        FooterVersion.Text=Nav.IsPaneOpen?$"版本 {AppVersion}":AppVersion;
+        FooterVersion.Text=Nav.IsPaneOpen?L.F("Version {0}", AppVersion):AppVersion;
         FooterVersion.FontSize=Nav.IsPaneOpen?12:10;
         FooterVersion.Margin=new Thickness(0);
         PaneFooterContent.Margin=Nav.IsPaneOpen?new Thickness(16,12,8,20):new Thickness(8,12,0,20);
@@ -174,14 +176,14 @@ public sealed partial class MainWindow
         {content.Children.Add(new TextBlock {Text=title,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});content.Children.Add(new TextBlock {Text=body,TextWrapping=TextWrapping.Wrap});}
         if(!shortcuts)
         {
-            Section("开始使用","在“任务栏外观”选择透明样式并开启内嵌监控；在“资源监控”勾选需要显示的指标，最多 8 项。");
-            Section("温度与风扇","点击“授权硬件访问”连接硬件采集；连接状态会显示在概览和资源监控页。硬件未提供的传感器会说明原因。");
-            Section("文字与配色","在“文字与图标”调整字体、字号、布局和颜色。字号输入后按回车或点击空白处保存。");
-            Section("导航与窗口","顶栏左侧按钮可折叠为图标导航。窗口缩小时内容自动换行；悬停导航图标可查看页面名称。");
-            Section("关闭与退出","关闭窗口默认保留任务栏监控；从系统托盘菜单可彻底退出并恢复任务栏。");
+            Section(L.T("Getting started"),L.T("Choose a background style and enable embedded monitoring on the Taskbar page. Select up to 8 metrics in Resource monitor."));
+            Section(L.T("Temperatures and fans"),L.T("Choose Authorize hardware access to connect hardware sensors. Connection status appears on Overview and Resource monitor. Unsupported sensors explain why readings are unavailable."));
+            Section(L.T("Text and colors"),L.T("Adjust fonts, size, layout and colors on Text & icons. Press Enter or click outside the font size box to save."));
+            Section(L.T("Navigation and window layout"),L.T("Use the toolbar button to collapse navigation to icons. Content reflows in smaller windows. Hover over an icon to see its page name."));
+            Section(L.T("Closing and quitting"),L.T("Closing the window keeps monitoring active by default. Quit from the system tray to restore the taskbar."));
         }
-        Section("键盘快捷键","F1    打开使用帮助\nCtrl + F    查找传感器\nCtrl + B    展开或折叠导航\nEnter    确认字号\nEsc    取消当前字号输入");
-        var dialog=new ContentDialog {Title=shortcuts?"键盘快捷键":"使用帮助",Content=new ScrollViewer {Content=content,MaxHeight=Math.Max(180,Root.ActualHeight-200)},CloseButtonText="关闭",XamlRoot=Root.XamlRoot};
+        Section(L.T("Keyboard shortcuts"),L.T("F1    Open help\nCtrl + F    Find sensors\nCtrl + B    Expand or collapse navigation\nEnter    Confirm font size\nEsc    Cancel font size editing"));
+        var dialog=new ContentDialog {Title=shortcuts?L.T("Keyboard shortcuts"):L.T("Help"),Content=new ScrollViewer {Content=content,MaxHeight=Math.Max(180,Root.ActualHeight-200)},CloseButtonText=L.T("Close"),XamlRoot=Root.XamlRoot};
         try
         {
             var shown=dialog.ShowAsync();
@@ -215,8 +217,8 @@ public sealed partial class MainWindow
             if(mode!=previous)
             {
                 previous=mode;
-                filters.ColumnDefinitions[0].Width=mode>=2?new GridLength(1,GridUnitType.Star):new GridLength(140);
-                filters.ColumnDefinitions[1].Width=mode>=2?new GridLength(1,GridUnitType.Star):new GridLength(140);
+                filters.ColumnDefinitions[0].Width=mode>=2?new GridLength(1,GridUnitType.Star):new GridLength(160);
+                filters.ColumnDefinitions[1].Width=mode>=2?new GridLength(1,GridUnitType.Star):new GridLength(160);
                 filters.ColumnDefinitions[2].MinWidth=0;
                 filters.ColumnDefinitions[2].Width=mode>=2?new GridLength(0):new GridLength(1,GridUnitType.Star);
                 filters.ColumnDefinitions[3].Width=mode==0?GridLength.Auto:new GridLength(0);
@@ -228,7 +230,7 @@ public sealed partial class MainWindow
             bool compact=width<660;if(compactBefore==compact)return;compactBefore=compact;
             list.ItemTemplate=compact?compactTemplate:wideTemplate;header.Children.Clear();header.ColumnDefinitions.Clear();
             var weights=compact?new[]{2d,1.2,1}:new[]{2d,1.8,1,1.2,.9};
-            var labels=compact?new[]{"指标与设备","当前值","状态"}:new[]{"指标","设备","类型","当前值","状态"};
+            var labels=compact?new[]{L.T("Metrics and devices"),L.T("Current value"),L.T("Status")}:new[]{L.T("Metric"),L.T("Device"),L.T("Type"),L.T("Current value"),L.T("Status")};
             for(int i=0;i<labels.Length;i++)
             {
                 header.ColumnDefinitions.Add(new(){Width=new GridLength(weights[i],GridUnitType.Star)});

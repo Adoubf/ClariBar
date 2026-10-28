@@ -1,6 +1,20 @@
+using L = ClariBar.Core.Localizer;
 namespace ClariBar.Core;
 
-public sealed record SensorCapability(string Key,string Label,string Status,string Explanation);
+public sealed record SensorCapability(string Key,string Label,string Status,string Explanation)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DisplayLabel
+    {
+        get
+        {
+            string prefix=Label.StartsWith("CPU",StringComparison.Ordinal)?"CPU":Label.StartsWith("GPU",StringComparison.Ordinal)?"GPU":"";
+            if(prefix.Length==0)return Localizer.T(Label);
+            string kind=Key.EndsWith("/Temperature",StringComparison.Ordinal)?"Temperature":Key.EndsWith("/Clock",StringComparison.Ordinal)?"Frequency":"";
+            return kind.Length==0?Localizer.T(Label):prefix+" "+Localizer.T(kind);
+        }
+    }
+}
 
 public static class SensorCatalog
 {
@@ -46,13 +60,13 @@ public static class SensorCatalog
     public static SensorReading[] Filter(SensorSnapshot snapshot,string filter,IEnumerable<string> pinned,bool showUnavailable)
     {
         var selected=pinned.ToHashSet();
-        IEnumerable<SensorReading> items=filter=="常用指标"?Common(snapshot):snapshot.Sensors;
+        IEnumerable<SensorReading> items=filter==L.T("Common metrics")?Common(snapshot):snapshot.Sensors;
         items=items.Where(sensor=>sensor.IsValid || sensor.Status=="warming" || showUnavailable ||
-            (filter=="常用指标" && sensor.Status=="requires_admin"));
+            (filter==L.T("Common metrics") && sensor.Status=="requires_admin"));
         return items.Where(sensor=>filter switch
         {
-            "仅温度"=>sensor.Kind=="Temperature", "仅风扇"=>sensor.Kind=="Fan", "仅占用"=>sensor.Kind=="Load",
-            "仅速率"=>sensor.Kind=="Throughput", "已固定"=>selected.Contains(sensor.Id), _=>true
+_ when filter == L.T("Temperatures only") =>sensor.Kind=="Temperature", _ when filter == L.T("Fans only") =>sensor.Kind=="Fan", _ when filter == L.T("Usage only") =>sensor.Kind=="Load",
+_ when filter == L.T("Transfer rates only") =>sensor.Kind=="Throughput", _ when filter == L.T("Pinned") =>selected.Contains(sensor.Id), _=>true
         }).ToArray();
     }
     public static SensorCapability[] Capabilities(IEnumerable<SensorReading> sensors)
@@ -65,11 +79,11 @@ public static class SensorCatalog
             {
                 var matching=device.Where(sensor=>sensor.Kind==kind).ToArray();
                 string status=matching.Any(sensor=>sensor.IsValid)?"valid":matching.Any(sensor=>sensor.Status=="requires_admin")?"requires_admin":matching.Length==0?"unsupported":"unavailable";
-                string label=$"{(cpu?"CPU":"GPU")} {(kind=="Temperature"?"温度":"频率")}";
+                string label=$"{(cpu?"CPU":"GPU")} {(kind=="Temperature"?L.T("Temperature"):L.T("Frequency"))}";
                 string explanation=status switch
                 {
-                    "valid"=>"已取得实际硬件读数。", "requires_admin"=>"需要授权独立采集器访问硬件。",
-                    "unsupported"=>"当前硬件采集接口未提供此项读数。", _=>"硬件访问后仍未返回有效读数。"
+                    "valid"=>L.T("Live hardware readings are available."), "requires_admin"=>L.T("Authorize the separate sensor process to access hardware."),
+                    "unsupported"=>L.T("The hardware interface does not expose this reading."), _=>L.T("Hardware access was granted, but no valid reading was returned.")
                 };
                 result.Add(new(device.Key+"/"+kind,label,status,explanation));
             }

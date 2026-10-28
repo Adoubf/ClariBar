@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.ComponentModel;
 using ClariBar.Core;
 
@@ -14,7 +15,7 @@ public sealed class SensorRow : INotifyPropertyChanged
     public string Device => Reading.Hardware;
     public string Kind => SensorLabels.Kind(Reading.Kind);
     public string Value => SensorFormatting.Value(Reading, fresh);
-    public string Status => fresh ? Reading.StatusText : "数据过期";
+    public string Status => fresh ? Reading.StatusText : L.T("Stale data");
     public event PropertyChangedEventHandler? PropertyChanged;
     public SensorRow(SensorReading reading, string customName, bool isFresh)
     { Reading = reading; alias = customName; fresh = isFresh; }

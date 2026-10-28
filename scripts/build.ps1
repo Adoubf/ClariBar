@@ -3,10 +3,10 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
 $sourceRoot = Split-Path $PSScriptRoot
 $cache = $env:CLARIBAR_ROOT
-$artifact = "$cache\artifacts\ClariBar\0.6.2"
+$artifact = "$cache\artifacts\ClariBar\0.7.0"
 Set-Location $sourceRoot
 if (Get-Process -Name ClariBar -ErrorAction SilentlyContinue) {
-    throw '请先从系统托盘菜单彻底退出澄栏，再重新构建。'
+    throw 'Quit ClariBar from the system tray before rebuilding.'
 }
 Start-Transcript -Path "$cache\logs\claribar-build.log" -Append
 try {

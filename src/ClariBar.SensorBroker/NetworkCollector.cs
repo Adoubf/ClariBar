@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -17,21 +18,21 @@ internal sealed class NetworkCollector
         Route=null;
         var text=new StringBuilder(131072);int result=CB_ReadNetworkSnapshot(text,text.Capacity);
         if(result<0)Marshal.ThrowExceptionForHR(result);
-        var topology=JsonSerializer.Deserialize<NetworkTopology>(text.ToString(),Wire.Json)??throw new IOException("出口网卡数据为空。");
-        if(topology.Version!=1)throw new IOException("出口网卡协议不匹配。");
+        var topology=JsonSerializer.Deserialize<NetworkTopology>(text.ToString(),Wire.Json)??throw new IOException(L.T("Empty network uplink data."));
+        if(topology.Version!=1)throw new IOException(L.T("Network uplink protocol mismatch."));
         var chosen=NetworkMetrics.Select(topology);int excluded=topology.Adapters.Count(adapter=>!adapter.Physical);
-        string name="默认物理出口";TrafficRates rates;
+        string name=L.T("Default physical uplink");TrafficRates rates;
         if(chosen is null)
         {
             tracker.Reset();rates=new(null,null,"offline");
-            Route=new("offline","",0,name,"",0,0,0,excluded,"未找到已连接的物理默认出口。");
+            Route=new("offline","",0,name,"",0,0,0,excluded,L.T("No connected physical default uplink was found."));
         }
         else
         {
             var adapter=chosen.Adapter;var route=chosen.Route;name=adapter.Name;
             rates=tracker.Observe(adapter.Id,topology.Tick,adapter.Received,adapter.Sent);
             Route=new(rates.Status,adapter.Id,adapter.Index,adapter.Name,adapter.Description,route.Family,route.RouteMetric,route.InterfaceMetric,excluded,
-                "按默认路由和接口跃点数选择物理出口；统计该物理接口的全部上下行，不累加虚拟网卡。");
+                L.T("Uses the default physical route and interface metrics. Counts all traffic through that interface without adding virtual adapter counters."));
         }
         return new[]
         {

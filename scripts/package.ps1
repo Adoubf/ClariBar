@@ -2,12 +2,14 @@
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
 $root=Split-Path $PSScriptRoot
-$version='0.6.2'
+$version='0.7.0'
 $stage="$env:CLARIBAR_ROOT\build\package\$version\payload"
 $release="$env:CLARIBAR_ROOT\artifacts\ClariBar\releases"
 $inner="$env:CLARIBAR_ROOT\build\package\$version\installer"
 if(!$InnoCompiler){
- $InnoCompiler="$env:CLARIBAR_ROOT\programs\InnoSetup\ISCC.exe"
+ $candidates=@("$env:CLARIBAR_ROOT\programs\InnoSetup\ISCC.exe",(Join-Path ([Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) 'Inno Setup 7\ISCC.exe'),(Join-Path $env:ProgramFiles 'Inno Setup 7\ISCC.exe'))
+ $InnoCompiler=$candidates | Where-Object {Test-Path -LiteralPath $_} | Select-Object -First 1
+ if(!$InnoCompiler){$InnoCompiler='ISCC.exe'}
  if(!(Test-Path $InnoCompiler)){
   $command=Get-Command ISCC.exe -ErrorAction SilentlyContinue
   if($command){$InnoCompiler=$command.Source}
@@ -30,7 +32,11 @@ foreach($resource in @('App.xbf','MainWindow.xbf','ClariBar.pri')){if(!(Test-Pat
 if($LASTEXITCODE -ne 0){throw 'Self-contained broker publish failed.'}
 Copy-Item "$env:CLARIBAR_ROOT\build\claribar-native\ClariBar.Native.dll","$env:CLARIBAR_ROOT\build\claribar-native\ClariBar.Maintenance.dll" $stage -Force
 Copy-Item "$env:CLARIBAR_ROOT\build\claribar-native\ExplorerTap\ClariBar.ExplorerTap.dll" "$stage\adapter" -Force
-Copy-Item "$root\README.md","$root\THIRD-PARTY-NOTICES.md","$root\LICENSE" $stage -Force
+Copy-Item "$root\README.md","$root\README.zh-CN.md","$root\THIRD-PARTY-NOTICES.md","$root\LICENSE" $stage -Force
+if(Test-Path "$root\assets\screenshots"){
+ [void](New-Item -ItemType Directory -Force -Path "$stage\assets")
+ Copy-Item "$root\assets\screenshots" "$stage\assets" -Recurse -Force
+}
 [void](New-Item -ItemType Directory -Force -Path "$stage\licenses")
 Copy-Item "$root\licenses\*" "$stage\licenses" -Recurse -Force
 Copy-Item (Join-Path (Split-Path $InnoCompiler) 'license.txt') "$stage\licenses\Inno-Setup-license.txt" -Force

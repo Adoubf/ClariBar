@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using ClariBar.Core;
 using System.Security.Cryptography;
 
@@ -18,14 +19,14 @@ internal sealed class TaskbarController
         {
             string path=PrepareAdapter();
             int hr=await Task.Run(()=>Native.CB_XamlAttach(path));
-            if(hr<0)throw new InvalidOperationException($"Explorer 连接失败，HRESULT 0x{hr:X8}");
+            if(hr<0)throw new InvalidOperationException(L.F("Explorer connection failed, HRESULT 0x{0:X8}", hr));
             Attached=true;
             for(int attempt=0;attempt<30;attempt++)
             {
                 await Task.Delay(200);Refresh();
                 if(Status.Frames>0)break;
             }
-            if(Status.Frames==0)Error="已建立诊断会话，尚未找到任务栏控件。";
+            if(Status.Frames==0)Error=L.T("The diagnostics session is connected, but taskbar controls have not been found.");
         }
         catch(Exception ex){Error=ex.Message;}
         finally{IsConnecting=false;}
@@ -38,13 +39,13 @@ internal sealed class TaskbarController
             string manifest=Path.Combine(AppContext.BaseDirectory,"adapter-path.txt");
             packaged=File.ReadAllText(manifest).Trim();
         }
-        if(!File.Exists(packaged))throw new FileNotFoundException("缺少任务栏适配模块，请重新安装澄栏。",packaged);
+        if(!File.Exists(packaged))throw new FileNotFoundException(L.T("Taskbar adapter is missing. Reinstall ClariBar."),packaged);
         string hash=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(packaged)));
         string directory=Path.Combine(AppPaths.Cache,"adapters",hash[..16]);Directory.CreateDirectory(directory);
         string target=Path.Combine(directory,"ClariBar.ExplorerTap.dll");
         if(!File.Exists(target))File.Copy(packaged,target);
         if(!Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(target))).Equals(hash,StringComparison.Ordinal))
-            throw new IOException("任务栏适配模块校验失败，请清理对应缓存后重新安装。");
+            throw new IOException(L.T("Taskbar adapter verification failed. Clear the affected adapter cache and reinstall ClariBar."));
         return target;
     }
     public void Refresh()

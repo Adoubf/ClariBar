@@ -1,0 +1,30 @@
+name: 功能建议（简体中文）
+description: 描述你的使用场景和希望增加或改进的功能。
+title: '[建议] '
+body:
+- type: markdown
+  attributes:
+    value: 请说明实际场景与期望行为。使用场景和功能方案为必填项。
+- type: textarea
+  id: use_case
+  attributes:
+    label: 使用场景与当前问题
+    placeholder: 你想完成什么？当前哪些行为造成不便？
+  validations:
+    required: true
+- type: textarea
+  id: proposal
+  attributes:
+    label: 期望增加或改进的行为
+    placeholder: 描述期望的操作、显示效果或工作方式。
+  validations:
+    required: true
+- type: textarea
+  id: alternatives
+  attributes:
+    label: 尝试过的替代方案（选填）
+- type: textarea
+  id: context
+  attributes:
+    label: 示例、截图与补充说明（选填）
+    description: 可提供参考效果；上传前请检查敏感信息。

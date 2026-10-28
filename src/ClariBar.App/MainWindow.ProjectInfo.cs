@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.Text.Json;
 using ClariBar.Core;
 using Microsoft.UI.Xaml;
@@ -26,30 +27,30 @@ public sealed partial class MainWindow
         try
         {
             if(!await Windows.System.Launcher.LaunchUriAsync(uri))
-                await MessageAsync("无法打开链接",uri.AbsoluteUri);
+                await MessageAsync(L.T("Could not open the link"),uri.AbsoluteUri);
         }
-        catch(Exception ex){await MessageAsync("无法打开链接",ex.Message+"\n"+uri.AbsoluteUri);}
+        catch(Exception ex){await MessageAsync(L.T("Could not open the link"),ex.Message+"\n"+uri.AbsoluteUri);}
     }
     private void BuildProjectAbout()
     {
         projectLinks.Clear();
-        Heading("作者与项目");
-        Row("作者与联系",ProjectAuthor+"\n"+ProjectEmail,
-            ProjectLink("联系作者","mailto:"+ProjectEmail+"?subject="+Uri.EscapeDataString("ClariBar 交流与反馈")),"\uE77B");
-        Row("GitHub",ProjectRepository,ProjectLink("查看源码",ProjectRepository),"\uE943");
-        Row("MIT 许可证","本项目原创代码与品牌素材采用 MIT 许可证。第三方依赖保留各自的许可。",
-            Button("查看许可证",()=>_=ShowProjectLicenseAsync()),"\uE8A5");
-        Heading("赞助与感谢");
-        Row("谢谢每一份支持","感谢每一位使用、反馈和贡献的朋友。赞助事宜可通过邮箱联系；如希望署名致谢，请在邮件中注明可公开展示的名称。",
-            ProjectLink("赞助联系","mailto:"+ProjectEmail+"?subject="+Uri.EscapeDataString("ClariBar 赞助与支持")),"\uEB51");
+        Heading(L.T("Author & project"));
+        Row(L.T("Author & contact"),ProjectAuthor+"\n"+ProjectEmail,
+            ProjectLink(L.T("Contact author"),"mailto:"+ProjectEmail+"?subject="+Uri.EscapeDataString(L.T("ClariBar questions and feedback"))),"\uE77B");
+        Row("GitHub",ProjectRepository,ProjectLink(L.T("View source"),ProjectRepository),"\uE943");
+        Row(L.T("MIT License"),L.T("Original ClariBar code and artwork use the MIT License. Third-party dependencies retain their own licenses."),
+            Button(L.T("View license"),()=>_=ShowProjectLicenseAsync()),"\uE8A5");
+        Heading(L.T("Sponsorship & thanks"));
+        Row(L.T("Thank you for your support"),L.T("Thank you to everyone who uses, reports issues or contributes. Contact the author by email about sponsorship. Include a publicly displayable name if you would like an acknowledgement."),
+            ProjectLink(L.T("Discuss sponsorship"),"mailto:"+ProjectEmail+"?subject="+Uri.EscapeDataString(L.T("ClariBar sponsorship and support"))),"\uEB51");
     }
     private async Task ShowProjectLicenseAsync()
     {
         string path=Path.Combine(AppContext.BaseDirectory,"LICENSE");
-        if(!File.Exists(path)){await MessageAsync("许可证","未找到本地许可证文件，请使用完整安装包。");return;}
+        if(!File.Exists(path)){await MessageAsync(L.T("License"),L.T("The local license file is missing. Use the complete installer."));return;}
         string license=File.ReadAllText(path);
         var text=new TextBlock {Text=license,TextWrapping=TextWrapping.Wrap,IsTextSelectionEnabled=true,FontSize=12,MaxWidth=520};
-        var dialog=new ContentDialog {Title="MIT 许可证",CloseButtonText="关闭",XamlRoot=Root.XamlRoot,
+        var dialog=new ContentDialog {Title=L.T("MIT License"),CloseButtonText=L.T("Close"),XamlRoot=Root.XamlRoot,
             Content=new ScrollViewer {Content=text,MaxHeight=Math.Max(180,Root.ActualHeight-220)}};
         var shown=dialog.ShowAsync();
         if(smokeTest)
@@ -74,7 +75,7 @@ public sealed partial class MainWindow
         bool email=texts.Any(text=>text.Contains(ProjectEmail));
         bool github=projectLinks.Any(button=>button.Tag is Uri uri && uri.AbsoluteUri==ProjectRepository);
         bool contacts=projectLinks.Count(button=>button.Tag is Uri uri && uri.OriginalString.StartsWith("mailto:"+ProjectEmail,StringComparison.Ordinal))==2;
-        bool sponsor=texts.Any(text=>text.Contains("公开展示的名称"));
+        bool sponsor=texts.Any(text=>text.Contains(Localizer.IsChinese?"公开展示的名称":"publicly displayable name"));
         await RenderCheckImageAsync("about-project");
         await ShowProjectLicenseAsync();
         var result=new{capturedAt=DateTimeOffset.Now,passed=author && email && github && contacts && sponsor && projectLicenseVerified,

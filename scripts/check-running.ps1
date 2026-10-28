@@ -16,6 +16,7 @@ $app=Get-Process -Name ClariBar -ErrorAction Stop | Select-Object -First 1
 $prefix='Local\ClariBar.Xaml.'+$app.Id+'.'
 $logs=@(Get-Item "$env:CLARIBAR_ROOT\logs\tap-bootstrap.log" -ErrorAction SilentlyContinue)
 $logs+=@(Get-ChildItem "$env:CLARIBAR_ROOT\artifacts\ClariBar\adapters" -Filter tap-bootstrap.log -File -Recurse -ErrorAction SilentlyContinue)
+$logs+=@(Get-ChildItem "$env:CLARIBAR_ROOT\adapters" -Filter tap-bootstrap.log -File -Recurse -ErrorAction SilentlyContinue)
 $names=@($logs | Sort-Object LastWriteTime | ForEach-Object {Get-Content $_.FullName -Encoding Unicode} | Where-Object {$_ -like "*Initialization data $prefix*"})
 if(!$names){throw 'The running application has not connected to its taskbar adapter.'}
 $name=($names[-1] -split 'Initialization data ',2)[1].Trim()

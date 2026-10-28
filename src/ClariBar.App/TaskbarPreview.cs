@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using ClariBar.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -16,7 +17,7 @@ internal sealed class TaskbarPreview : Grid
     private readonly StackPanel tray = new() { Orientation=Orientation.Horizontal,Spacing=12,VerticalAlignment=VerticalAlignment.Center };
     private readonly TextBlock time = new() { FontSize=12,HorizontalAlignment=HorizontalAlignment.Center };
     private readonly TextBlock date = new() { FontSize=11,HorizontalAlignment=HorizontalAlignment.Center };
-    private readonly TextBlock network = Glyph("\uE701"),volume=Glyph("\uE767"),input=new(){Text="中",FontSize=13,VerticalAlignment=VerticalAlignment.Center};
+    private readonly TextBlock network = Glyph("\uE701"),volume=Glyph("\uE767"),input=new(){Text=L.T("EN"),FontSize=13,VerticalAlignment=VerticalAlignment.Center};
     private bool dark = true;
     private AppSettings? currentSettings;
     private TaskbarConfig currentConfig;
@@ -29,8 +30,8 @@ internal sealed class TaskbarPreview : Grid
     {
         MinHeight=170;RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});RowDefinitions.Add(new(){Height=GridLength.Auto});
         var desktop = new StackPanel { Margin=new Thickness(22,20,22,20),Spacing=6,VerticalAlignment=VerticalAlignment.Center };
-        desktop.Children.Add(new TextBlock {Text="你的桌面",FontSize=17,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,Foreground=Solid("#FFFFFF")});
-        desktop.Children.Add(new TextBlock {Text="实时指标 · 当前布局与文字样式",FontSize=12,Foreground=Solid("#DAE6EE")});Children.Add(desktop);
+        desktop.Children.Add(new TextBlock {Text=L.T("Your desktop"),FontSize=17,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,Foreground=Solid("#FFFFFF")});
+        desktop.Children.Add(new TextBlock {Text=L.T("Live readings · Current layout and text style"),FontSize=12,Foreground=Solid("#DAE6EE")});Children.Add(desktop);
         bar.ColumnDefinitions.Add(new(){Width=GridLength.Auto});bar.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});bar.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var apps = new StackPanel {Orientation=Orientation.Horizontal,Spacing=16,VerticalAlignment=VerticalAlignment.Center};
         var start=new Grid {Width=18,Height=18,RowSpacing=2,ColumnSpacing=2};
@@ -78,7 +79,7 @@ internal sealed class TaskbarPreview : Grid
         for(int i=0;i<rows;i++)metrics.RowDefinitions.Add(new(){Height=GridLength.Auto});
         for(int i=0;i<Math.Max(count,1);i++)
         {
-            var item=new TextBlock {Text=count==0?"等待监控数据":config.Metrics[i].Text,FontSize=size,FontFamily=new FontFamily(settings.MonitorFontFamily),
+            var item=new TextBlock {Text=count==0?L.T("Waiting for monitoring data"):config.Metrics[i].Text,FontSize=size,FontFamily=new FontFamily(settings.MonitorFontFamily),
                 FontWeight=settings.MonitorBold?Microsoft.UI.Text.FontWeights.Bold:Microsoft.UI.Text.FontWeights.Normal,
                 Foreground=count==0?Solid(system):Argb(config.Metrics[i].Color),TextWrapping=TextWrapping.NoWrap,
                 TextTrimming=TextTrimming.CharacterEllipsis,TextLineBounds=TextLineBounds.Full,MaxLines=1};

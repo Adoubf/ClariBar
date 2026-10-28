@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -30,8 +31,8 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer freshnessTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly ObservableCollection<SensorRow> sensorRows = [];
     private readonly Dictionary<string, SensorRow> rowIndex = [];
-    private string page = "overview", query = "", category = "全部类别", sensorKind = "常用指标", deviceId = "";
-    private string connection = "正在连接采集进程…";
+    private string page = "overview", query = "", category = L.T("All categories"), sensorKind = L.T("Common metrics"), deviceId = "";
+    private string connection = L.T("Connecting to sensors…");
     private bool nativeReady, quitting, reloading, synchronizingSelection,showUnavailable;
     private BrokerPhase connectionPhase=BrokerPhase.Idle;
     private string? accessFallbackNotice;
@@ -66,11 +67,12 @@ public sealed partial class MainWindow : Window
         smokeTest = Environment.GetCommandLineArgs().Contains("--smoke-test");
         store = new SettingsStore(smokeTest ? Path.Combine(AppPaths.Data, "smoke-session") : AppPaths.Data);
         settings = store.Load();
+        if(smokeTest && AppLocalization.TestOverride is {} languageOverride)settings.Language=Localizer.NormalizePreference(languageOverride);
         if(NetworkMetrics.Migrate(settings))Save();
         InitializeComponent();
         Root.AddHandler(UIElement.PointerPressedEvent,new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPagePointerPressed),true);
         Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)CommitFontSize(true);};
-        Title = "澄栏 · ClariBar";
+        Title = L.T("ClariBar");
         hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         AppWindow.Resize(new SizeInt32(1220, 860));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "ClariBar.ico"));
@@ -82,8 +84,8 @@ public sealed partial class MainWindow : Window
             else if (action == 3) { settings.MiniMonitorEnabled = !settings.MiniMonitorEnabled; Save(); UpdateMonitor(); if (page == "taskbar") RenderPage(); }
             else if(action==4){settings.TaskbarMonitorEnabled=!settings.TaskbarMonitorEnabled;TaskbarChanged();if(page=="taskbar")RenderPage();}
         });
-        try { nativeReady = Native.CB_Start(trayCallback) == 1; }
-        catch (Exception ex) { connection = $"原生模块未加载：{ex.Message}"; }
+        try { Native.CB_SetLanguage(Localizer.IsChinese?1:0);nativeReady = Native.CB_Start(trayCallback) == 1; }
+        catch (Exception ex) { connection = L.F("Native module unavailable: {0}", ex.Message); }
         AppWindow.Closing += (sender, e) =>
         {
             CommitFontSize(true);
@@ -109,7 +111,7 @@ public sealed partial class MainWindow : Window
         if(!fallback)accessFallbackNotice=null;
         snapshot=SensorSnapshot.Empty("connecting");
         SetConnectionState(elevated?BrokerPhase.Authorizing:BrokerPhase.Connecting,
-            elevated?"正在等待 Windows 硬件访问授权…":"正在连接采集进程…");
+            elevated?L.T("Waiting for Windows hardware authorization…"):L.T("Connecting to sensors…"));
         UpdateLive();
         try
         {
@@ -123,7 +125,7 @@ public sealed partial class MainWindow : Window
                 if (quitting || broker != next) return;
                 snapshot = data;
                 if(data.Elevated && !settings.HardwareAccessEnabled){settings.HardwareAccessEnabled=true;Save();}
-                SetConnectionState(BrokerPhase.Connected,data.Errors.Length>0?$"采集部分可用 · {data.Errors[0]}":data.Elevated?"硬件访问已授权":"基础监控已连接");
+                SetConnectionState(BrokerPhase.Connected,data.Errors.Length>0?L.F("Some readings are unavailable · {0}", L.T(data.Errors[0])):data.Elevated?L.T("Hardware access authorized"):L.T("Basic monitoring connected"));
                 UpdateLive();
                 if(Environment.GetCommandLineArgs().Contains("--diagnostics") && DateTimeOffset.Now-lastHealthExport>TimeSpan.FromSeconds(5))
                 {
@@ -173,16 +175,16 @@ public sealed partial class MainWindow : Window
         cpuValue = gpuValue = temperatureValue = fanValue = null;
         deviceFilter = null; renameSelector = null; metricColorSelector = null; taskbarPreview = null;
         hardwareAction=null;hardwareState=null;hardwareProgress=null;sensorTitleRow=null;sensorFilters=null;sensorFilterSummary=null;unavailableFilter=null;
-        fontSizeEditor=null;
+        fontSizeEditor=null;languageSelector=null;
         responsiveLayouts.Clear();layoutControls.Clear();
         PageContent.Children.Clear();
         PageScroll.ChangeView(null, 0, null);
         string title = page switch
         {
-            "taskbar" => "任务栏外观", "sensors" => "资源监控", "colors" => "文字与图标",
-            "general" => "通用设置", "about" => "关于澄栏", _ => "概览"
+            "taskbar" => L.T("Taskbar"), "sensors" => L.T("Resource monitor"), "colors" => L.T("Text & icons"),
+            "general" => L.T("General"), "about" => L.T("About ClariBar"), _ => L.T("Overview")
         };
-        PageContent.Children.Add(new TextBlock { Text = "澄栏  ›  " + title, Style = SecondaryStyle, Margin = new Thickness(0, 0, 0, 2) });
+        PageContent.Children.Add(new TextBlock { Text = L.T("ClariBar  ›  ") + title, Style = SecondaryStyle, Margin = new Thickness(0, 0, 0, 2) });
         var pageTitle=new TextBlock {Text=title,FontSize=28,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center};
         pageHeader=new Grid {ColumnSpacing=18,Margin=new Thickness(0,0,0,12)};
         pageHeader.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
@@ -195,7 +197,7 @@ public sealed partial class MainWindow : Window
         }
         else if(page=="about")
         {
-            var version=Description($"{AppVersion} · Windows 11 任务栏与实时监控");
+            var version=Description(L.F("{0} · Windows 11 taskbar and live monitoring", AppVersion));
             version.VerticalAlignment=VerticalAlignment.Center;Grid.SetColumn(version,1);pageHeader.Children.Add(version);
             ResponsiveHeader(pageHeader,version,760);
         }
@@ -241,7 +243,7 @@ public sealed partial class MainWindow : Window
     }
     private ToggleSwitch Toggle(bool current, Action<bool> changed)
     {
-        var toggle = new ToggleSwitch { IsOn = current, OnContent = "开", OffContent = "关", VerticalAlignment = VerticalAlignment.Center };
+        var toggle = new ToggleSwitch { IsOn = current, OnContent = L.T("On"), OffContent = L.T("Off"), VerticalAlignment = VerticalAlignment.Center };
         toggle.Toggled += (_, _) => changed(toggle.IsOn);
         return toggle;
     }
@@ -253,10 +255,10 @@ public sealed partial class MainWindow : Window
 
     private void BuildOverview()
     {
-        PageContent.Children.Add(Description("清晰掌握系统状态，让桌面保持轻盈。"));
+        PageContent.Children.Add(Description(L.T("Keep an eye on your system while keeping your desktop clear.")));
         var tiles = new Grid { ColumnSpacing = 10, Margin = new Thickness(0, 8, 0, 6) };
         for (int i = 0; i < 4; i++) tiles.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
-        var labels = new[] { "CPU 占用", "CPU 温度", "GPU · 3D", "风扇通道" };
+        var labels = new[] { L.T("CPU usage"), L.T("CPU temperature"), "GPU · 3D", L.T("Fan channels") };
         var values = new TextBlock[4];
         for (int i = 0; i < labels.Length; i++)
         {
@@ -267,47 +269,47 @@ public sealed partial class MainWindow : Window
         }
         cpuValue = values[0]; temperatureValue = values[1]; gpuValue = values[2]; fanValue = values[3];
         ResponsiveTiles(tiles,4);PageContent.Children.Add(tiles);
-        accessInfo = Notice("硬件访问", "正在连接采集进程…");
-        Row("读取温度与风扇转速", "授权独立采集进程访问硬件，设置界面保持普通权限。",
+        accessInfo = Notice(L.T("Hardware access"), L.T("Connecting to sensors…"));
+        Row(L.T("Read temperatures and fan speeds"), L.T("Authorize the separate sensor process to access hardware while settings run with standard permissions."),
             HardwareActionControl(), "\uEA18");
-        Row("监控窗", "显示已固定的指标，默认鼠标穿透；关闭穿透后可拖动。",
+        Row(L.T("Monitor window"), L.T("Show pinned metrics in a floating window. Click-through is enabled by default; disable it to drag."),
             Toggle(settings.MiniMonitorEnabled, value => { settings.MiniMonitorEnabled = value; Save(); UpdateMonitor(); }), "\uE9D9");
-        Row("选择监控指标", "CPU、GPU、磁盘、网络和主板传感器；支持固定与重命名。",
-            Button("打开资源监控", () => Nav.SelectedItem = Nav.MenuItems[2]), "\uE9D9");
-        Heading("采集状态");
+        Row(L.T("Choose monitoring metrics"), L.T("CPU, GPU, disk, network and motherboard sensors, with pinning and custom display names."),
+            Button(L.T("Open resource monitor"), () => Nav.SelectedItem = Nav.MenuItems[2]), "\uE9D9");
+        Heading(L.T("Monitoring status"));
         statusText = new TextBlock { TextWrapping = TextWrapping.Wrap, Style = SecondaryStyle };
         PageContent.Children.Add(Card(statusText));
-        if (store.LoadWarning is not null) Notice("配置恢复", store.LoadWarning, InfoBarSeverity.Warning);
+        if (store.LoadWarning is not null) Notice(L.T("Settings recovery"), L.T(store.LoadWarning), InfoBarSeverity.Warning);
     }
 
     private void BuildTaskbar()
     {
         AddTaskbarPreview();
-        taskbarInfo = Notice("Explorer 任务栏适配", "连接后会核对本机任务栏控件与应用状态。");
-        Row("任务栏连接", "系统或显示器设置更新后，可重新检查连接；关闭功能会恢复原有外观。",
-            Button("连接 / 重新检查", () => _ = EnsureTaskbarAsync(true), true), "\uE7F4");
-        Heading("任务栏背景");
-        var mode = new ComboBox { ItemsSource = new[] { "跟随系统", "全透明", "半透明着色" },
+        taskbarInfo = Notice(L.T("Explorer taskbar integration"), L.T("Checks the taskbar controls and applied state after connecting."));
+        Row(L.T("Taskbar connection"), L.T("Reconnect after Windows or display changes. Disabling taskbar features restores the original appearance."),
+            Button(L.T("Connect / check again"), () => _ = EnsureTaskbarAsync(true), true), "\uE7F4");
+        Heading(L.T("Taskbar background"));
+        var mode = new ComboBox { ItemsSource = new[] { L.T("Follow system"), L.T("Transparent"), L.T("Tinted") },
             SelectedIndex = settings.TaskbarBackgroundMode switch { "Transparent" => 1, "Tinted" => 2, _ => 0 }, MinWidth = 160 };
         mode.SelectionChanged += (_, _) => { settings.TaskbarBackgroundMode = mode.SelectedIndex switch {1=>"Transparent",2=>"Tinted",_=>"System"}; TaskbarChanged(); };
-        Row("背景样式", "调整任务栏背景；选择跟随系统可恢复原有外观。", mode, "\uE790");
-        AddColorPicker("任务栏背景颜色", settings.TaskbarBackgroundColor, hex => settings.TaskbarBackgroundColor = hex);
+        Row(L.T("Background style"), L.T("Customize the taskbar background. Follow system restores the original appearance."), mode, "\uE790");
+        AddColorPicker(L.T("Taskbar background color"), settings.TaskbarBackgroundColor, hex => settings.TaskbarBackgroundColor = hex);
         var opacity = new Slider { Minimum = 0, Maximum = 100, Value = settings.TaskbarOpacity, StepFrequency = 1, Width = 200 };
         opacity.ValueChanged += (_, args) => { settings.TaskbarOpacity = (int)args.NewValue; TaskbarChanged(); };
-        Row("背景不透明度", "仅半透明着色模式使用，0% 完全透明，100% 实色。", opacity, "\uE790");
-        Heading("内嵌资源监控");
-        Row("嵌入 Windows 任务栏", "作为托盘布局中的真实子项显示，各任务栏分别参与空间分配。",
+        Row(L.T("Background opacity"), L.T("Used only for tinted backgrounds: 0% is transparent and 100% is solid."), opacity, "\uE790");
+        Heading(L.T("Embedded resource monitor"));
+        Row(L.T("Embed in the Windows taskbar"), L.T("Displays as an actual item in the system tray layout, reserving space independently on each taskbar."),
             Toggle(settings.TaskbarMonitorEnabled, value => {settings.TaskbarMonitorEnabled=value;TaskbarChanged();}), "\uE9D9");
         AddMonitorLayoutControls();
-        Row("选择监控指标", "最多 8 项；默认显示 CPU、温度与当前最活跃网卡的上下行。",
-            Button("选择指标", () => Nav.SelectedItem = Nav.MenuItems[2]), "\uE8FD");
-        Row("逐项文字颜色", "固定指标可分别指定颜色，未单独设置时跟随默认文字颜色。",
-            Button("设置颜色", () => Nav.SelectedItem = Nav.MenuItems[3]), "\uE790");
-        Heading("独立监控窗");
-        Row("额外显示独立监控窗", "与任务栏内嵌显示独立开关；关闭鼠标穿透后可拖动位置。",
+        Row(L.T("Choose monitoring metrics"), L.T("Up to 8 metrics. The default selection includes CPU, temperature and physical uplink traffic."),
+            Button(L.T("Select a metric"), () => Nav.SelectedItem = Nav.MenuItems[2]), "\uE8FD");
+        Row(L.T("Individual text colors"), L.T("Set colors per pinned metric. Unconfigured metrics use the default text color."),
+            Button(L.T("Configure colors"), () => Nav.SelectedItem = Nav.MenuItems[3]), "\uE790");
+        Heading(L.T("Floating monitor"));
+        Row(L.T("Show a floating monitor"), L.T("Controlled separately from the embedded taskbar display. Disable click-through to drag the floating window."),
             Toggle(settings.MiniMonitorEnabled, value => {settings.MiniMonitorEnabled=value;Save();UpdateMonitor();}), "\uE9D9");
-        Heading("还原");
-        Row("还原任务栏修改", "关闭背景、系统前景色与内嵌显示，保留你的颜色数值和指标选择。", Button("全部还原", () =>
+        Heading(L.T("Restore"));
+        Row(L.T("Restore taskbar changes"), L.T("Disable taskbar styling and embedded monitoring while preserving color values and selected metrics."), Button(L.T("Restore all"), () =>
         {
             settings.TaskbarBackgroundMode="System"; settings.TaskbarMonitorEnabled=false;
             settings.TimeColorEnabled=settings.DateColorEnabled=settings.TrayColorEnabled=false;
@@ -318,15 +320,15 @@ public sealed partial class MainWindow : Window
 
     private void AddMonitorLayoutControls()
     {
-        var layout = new ComboBox { ItemsSource = new[] { "单行", "双栏（两列）", "双行（两行）" },
+        var layout = new ComboBox { ItemsSource = new[] { L.T("Single line"), L.T("Two columns"), L.T("Two rows") },
             SelectedIndex = settings.MonitorLayout switch {"SingleLine"=>0,"TwoRows"=>2,_=>1}, MinWidth = 160 };
         layout.SelectionChanged += (_, _) => {settings.MonitorLayout=layout.SelectedIndex switch{0=>"SingleLine",2=>"TwoRows",_=>"TwoColumns"};TaskbarChanged();};
-        Row("显示布局", "双栏按两列排列；双行按两行排列，空间不足时文字省略。", layout, "\uE8FD");
+        Row(L.T("Monitor layout"), L.T("Choose two columns or two rows. Text is trimmed when space is limited."), layout, "\uE8FD");
         var size=new NumberBox {Minimum=8,Maximum=24,Value=settings.MonitorFontSize,SmallChange=1,LargeChange=2,
             SpinButtonPlacementMode=NumberBoxSpinButtonPlacementMode.Inline,Width=160,
             NumberFormatter=new Windows.Globalization.NumberFormatting.DecimalFormatter {FractionDigits=0,IntegerDigits=1}};
         fontSizeEditor=size;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(size,"整体文字大小");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(size,L.T("Text size"));
         size.ValueChanged+=(_,args)=>{if(!updatingFontSize && double.IsFinite(args.NewValue))SetFontSize(args.NewValue);};
         size.AddHandler(UIElement.KeyDownEvent,new Microsoft.UI.Xaml.Input.KeyEventHandler((_,args)=>
         {
@@ -334,20 +336,20 @@ public sealed partial class MainWindow : Window
             else if(args.Key==Windows.System.VirtualKey.Escape){SetFontSize(settings.MonitorFontSize);PageScroll.Focus(FocusState.Programmatic);args.Handled=true;}
         }),true);
         size.LostFocus+=(_,_)=>{if(!Within(FocusManager.GetFocusedElement(Root.XamlRoot) as DependencyObject,size))CommitFontSize(false);};
-        Row("整体文字大小","输入后按回车，或点击空白处保存；上下按钮可逐级调整。",size,"\uE8D2");
+        Row(L.T("Text size"),L.T("Press Enter or click outside to save. Use the arrow buttons to adjust one step at a time."),size,"\uE8D2");
         fontFamilies??=Native.FontFamilies();
         var fonts=new ComboBox {ItemsSource=fontFamilies,SelectedItem=settings.MonitorFontFamily,IsEditable=true,Text=settings.MonitorFontFamily,Width=240,MaxDropDownHeight=320};
         void SetFont(){string name=fonts.Text.Trim();if(name.Length>0 && name!=settings.MonitorFontFamily){settings.MonitorFontFamily=name;TaskbarChanged();}}
         fonts.SelectionChanged+=(_,_)=>{if(fonts.SelectedItem is string name){settings.MonitorFontFamily=name;TaskbarChanged();}};
         fonts.LostFocus+=(_,_)=>SetFont();
-        Row("监控字体", "从本机已安装字体中选择，也可输入字体名称。",fonts,"\uE8D2");
-        Row("加粗文字", "统一加粗所有监控指标。",Toggle(settings.MonitorBold,value=>{settings.MonitorBold=value;TaskbarChanged();}),"\uE8DD");
+        Row(L.T("Monitor font"), L.T("Select an installed font or enter its name."),fonts,"\uE8D2");
+        Row(L.T("Bold text"), L.T("Use bold text for all monitoring metrics."),Toggle(settings.MonitorBold,value=>{settings.MonitorBold=value;TaskbarChanged();}),"\uE8DD");
         var width = new Slider { Minimum = 100, Maximum = 900, Value = settings.MonitorWidth, StepFrequency = 10, Width = 200,IsEnabled=!settings.MonitorAutoWidth };
-        Row("自动适应内容宽度", "默认开启。各列按文字、字体与字号计算宽度，内容过长时保留任务栏空间。",
+        Row(L.T("Automatic content width"), L.T("Enabled by default. Each column adapts to its text, font and size while preserving space on the taskbar."),
             Toggle(settings.MonitorAutoWidth,value=>{settings.MonitorAutoWidth=value;width.IsEnabled=!value;TaskbarChanged();}),"\uE7F4");
         width.ValueChanged += (_, args) => {settings.MonitorWidth=(int)args.NewValue;TaskbarChanged();};
-        Row("手动区域宽度", "关闭自动宽度后使用，单位为逻辑像素。", width, "\uE7F4");
-        Row("鼠标穿透", "默认开启。关闭后独立监控窗可拖动；内嵌区域可接收鼠标。",
+        Row(L.T("Manual width"), L.T("Used when automatic width is disabled. Values are in logical pixels."), width, "\uE7F4");
+        Row(L.T("Click-through"), L.T("Enabled by default. Disable to drag the floating window and allow the embedded monitor to receive pointer input."),
             Toggle(settings.MonitorClickThrough, value => {settings.MonitorClickThrough=value;TaskbarChanged();}), "\uE962");
     }
 
@@ -398,36 +400,37 @@ public sealed partial class MainWindow : Window
     {
         if(taskbarInfo is null)return;
         taskbar.Refresh();var state=taskbar.Status;
-        taskbarInfo.Title=taskbar.IsConnecting?"正在连接 Explorer":state.Frames>0?"任务栏已连接":"任务栏适配状态";
-        taskbarInfo.Message=taskbar.IsConnecting?"正在枚举本机 XAML 布局…":taskbar.Error ??
-            (state.Connected==0?"尚未连接；启用任务栏功能时会自动连接。":
-            $"已连接 {state.Frames} 个任务栏 · 内嵌监控 {state.Panels} 处 · 时间与日期 {(state.Times>0 && state.Dates>0?"可用":"待检查")} · 系统图标 {(state.SystemIcons>0?"可用":"待检查")}");
-        if(state.LastError!=0)taskbarInfo.Message+=$"；适配错误 0x{state.LastError:X8}";
-        if(state.AttachResult<0)taskbarInfo.Message+=$"；连接错误 0x{state.AttachResult:X8}，请手动重新检查。";
+        taskbarInfo.Title=taskbar.IsConnecting?L.T("Connecting to Explorer"):state.Frames>0?L.T("Taskbar connected"):L.T("Taskbar integration status");
+        taskbarInfo.Message=taskbar.IsConnecting?L.T("Inspecting the local XAML layout…"):taskbar.Error ??
+            (state.Connected==0?L.T("Not connected. Taskbar features connect automatically when enabled."):
+            L.F("{0} taskbars connected · {1} embedded monitors · Time and date: {2} · System icons: {3}", state.Frames, state.Panels, (state.Times>0 && state.Dates>0?L.T("Available"):L.T("Not checked")), (state.SystemIcons>0?L.T("Available"):L.T("Not checked"))));
+        if(state.LastError!=0)taskbarInfo.Message+=L.F("; taskbar error 0x{0:X8}", state.LastError);
+        if(state.AttachResult<0)taskbarInfo.Message+=L.F("; connection error 0x{0:X8}. Choose Connect / check again.", state.AttachResult);
+        taskbarInfo.Message=L.T(taskbarInfo.Message);
         taskbarInfo.Severity=taskbar.Error is not null || state.LastError!=0 || state.AttachResult<0?InfoBarSeverity.Warning:InfoBarSeverity.Informational;
     }
 
     private void SetConnectionState(BrokerPhase phase,string message)
     {
-        connectionPhase=phase;connection=message;
+        connectionPhase=phase;connection=L.T(message);
         if(connectionTransitions.Count==0 || connectionTransitions[^1]!=phase)connectionTransitions.Add(phase);
         UpdateHardwareAction();
     }
     private bool ConnectingHardware=>reloading || connectionPhase is BrokerPhase.Authorizing or BrokerPhase.Connecting or BrokerPhase.Reading;
     private string HardwareStatusText()=>connectionPhase switch
     {
-        BrokerPhase.Authorizing=>"等待硬件授权", BrokerPhase.Connecting=>"正在连接采集器",BrokerPhase.Reading=>"正在读取硬件数据",
-        BrokerPhase.Cancelled=>"硬件授权已取消",BrokerPhase.Failed=>"采集连接失败",
-        BrokerPhase.Connected when !snapshot.IsFresh=>"采集连接已中断",
-        BrokerPhase.Connected when snapshot.Elevated=>"硬件访问已授权",
-        BrokerPhase.Connected=>"基础监控已连接",_=>"等待采集"
+        BrokerPhase.Authorizing=>L.T("Waiting for hardware authorization"), BrokerPhase.Connecting=>L.T("Connecting to the sensor process"),BrokerPhase.Reading=>L.T("Reading hardware data"),
+        BrokerPhase.Cancelled=>L.T("Hardware authorization cancelled"),BrokerPhase.Failed=>L.T("Sensor connection failed"),
+        BrokerPhase.Connected when !snapshot.IsFresh=>L.T("Sensor connection lost"),
+        BrokerPhase.Connected when snapshot.Elevated=>L.T("Hardware access authorized"),
+        BrokerPhase.Connected=>L.T("Basic monitoring connected"),_=>L.T("Waiting for sensors")
     };
     private FrameworkElement HardwareActionControl()
     {
         var controls=new StackPanel {Orientation=Orientation.Horizontal,Spacing=10,VerticalAlignment=VerticalAlignment.Center};
         hardwareProgress=new ProgressRing {Width=16,Height=16,Visibility=Visibility.Collapsed};controls.Children.Add(hardwareProgress);
         hardwareState=new TextBlock {Style=SecondaryStyle,VerticalAlignment=VerticalAlignment.Center};controls.Children.Add(hardwareState);
-        hardwareAction=Button("授权硬件访问",()=>_=ConnectAsync((snapshot.IsFresh && snapshot.Sensors.Length>0) || settings.HardwareAccessEnabled),true);
+        hardwareAction=Button(L.T("Authorize hardware access"),()=>_=ConnectAsync((snapshot.IsFresh && snapshot.Sensors.Length>0) || settings.HardwareAccessEnabled),true);
         // An existing basic session upgrades; an authorized session reconnects
         // with its current privilege. Only live sample data confirms authorization.
         controls.Children.Add(hardwareAction);UpdateHardwareAction();return controls;
@@ -438,8 +441,8 @@ public sealed partial class MainWindow : Window
         bool live=connectionPhase==BrokerPhase.Connected && snapshot.IsFresh && snapshot.Sensors.Length>0;
         hardwareAction.Content=connectionPhase switch
         {
-            BrokerPhase.Authorizing=>"等待授权…",BrokerPhase.Connecting=>"连接中…",BrokerPhase.Reading=>"读取中…",
-            _ when live && snapshot.Elevated=>"重新连接",_ when live=>"授权硬件访问",_=>"重新连接"
+            BrokerPhase.Authorizing=>L.T("Waiting for authorization…"),BrokerPhase.Connecting=>L.T("Connecting…"),BrokerPhase.Reading=>L.T("Reading…"),
+            _ when live && snapshot.Elevated=>L.T("Reconnect"),_ when live=>L.T("Authorize hardware access"),_=>L.T("Reconnect")
         };
         hardwareAction.IsEnabled=!ConnectingHardware && !quitting;
         if(hardwareState is not null)hardwareState.Text=HardwareStatusText();
@@ -464,9 +467,9 @@ public sealed partial class MainWindow : Window
         bool stacked=Grid.GetRow((FrameworkElement)VisualTreeHelper.GetParent(hardwareAction))>0;
         bool titleAction=(stacked || action.X>sensorTitleRow.ActualWidth*.5) && action.X+hardwareAction.ActualWidth<=sensorTitleRow.ActualWidth+1 && action.Y>=-1;
         bool summaryAfterDevice=(summary.Y>=device.Y+deviceFilter.ActualHeight-1 || summary.X>=device.X+deviceFilter.ActualWidth-1) && summary.X+sensorFilterSummary.ActualWidth<=sensorFilters.ActualWidth+1;
-        bool distinctFilterNames=sensorFilters.Children.OfType<ComboBox>().First().SelectedItem?.ToString()=="全部类别" &&
-            (deviceFilter.SelectedItem as DeviceOption)?.Name=="全部硬件";
-        bool actualConnection=hardwareAction.Content?.ToString()==(snapshot.Elevated?"重新连接":"授权硬件访问") && hardwareAction.IsEnabled && !ConnectingHardware;
+        bool distinctFilterNames=sensorFilters.Children.OfType<ComboBox>().First().SelectedItem?.ToString()==L.T("All categories") &&
+            (deviceFilter.SelectedItem as DeviceOption)?.Name==L.T("All hardware");
+        bool actualConnection=hardwareAction.Content?.ToString()==(snapshot.Elevated?L.T("Reconnect"):L.T("Authorize hardware access")) && hardwareAction.IsEnabled && !ConnectingHardware;
         bool progressObserved=connectionTransitions.Contains(BrokerPhase.Connecting) && connectionTransitions.Contains(BrokerPhase.Reading) && connectionTransitions.Contains(BrokerPhase.Connected);
         sensorControlsVerification=new {passed=titleAction && summaryAfterDevice && distinctFilterNames && actualConnection && progressObserved,
             titleAction,summaryAfterDevice,distinctFilterNames,actualConnection,progressObserved,actionX=action.X,deviceX=device.X,summaryX=summary.X,
@@ -478,35 +481,35 @@ public sealed partial class MainWindow : Window
 
     private void BuildSensors()
     {
-        accessInfo = Notice("实时传感器", "连接后显示实际读数，不可用项目显示 —。");
-        networkInfo=Notice("默认物理出口","正在检查默认路由…");
+        accessInfo = Notice(L.T("Live sensors"), L.T("Shows actual readings when connected. Unavailable readings appear as —."));
+        networkInfo=Notice(L.T("Default physical uplink"),L.T("Checking the default route…"));
         var filters=new Grid {ColumnSpacing=8};sensorFilters=filters;
-        filters.ColumnDefinitions.Add(new(){Width=new GridLength(140)});
-        filters.ColumnDefinitions.Add(new(){Width=new GridLength(140)});
+        filters.ColumnDefinitions.Add(new(){Width=new GridLength(160)});
+        filters.ColumnDefinitions.Add(new(){Width=new GridLength(160)});
         filters.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star),MinWidth=110});
         filters.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        var categories = new ComboBox { ItemsSource = new[] { "全部类别", "CPU", "GPU", "主板与风扇", "磁盘", "网络", "内存" }, SelectedItem = category, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var categories = new ComboBox { ItemsSource = new[] { L.T("All categories"), "CPU", "GPU", L.T("Motherboard & fans"), L.T("Disk"), L.T("Network"), L.T("Memory") }, SelectedItem = category, HorizontalAlignment = HorizontalAlignment.Stretch };
         categories.SelectionChanged += (_, _) => { category = (string)categories.SelectedItem; deviceId = ""; PopulateDevices(); RefreshSensorRows(); };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(categories,"设备类别");
-        ToolTipService.SetToolTip(categories,"按设备类别筛选");filters.Children.Add(categories);
-        var kinds = new ComboBox { ItemsSource = new[] { "常用指标", "全部指标", "已固定", "仅温度", "仅风扇", "仅占用", "仅速率" }, SelectedItem = sensorKind, HorizontalAlignment = HorizontalAlignment.Stretch };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(categories,L.T("Device category"));
+        ToolTipService.SetToolTip(categories,L.T("Filter by device category"));filters.Children.Add(categories);
+        var kinds = new ComboBox { ItemsSource = new[] { L.T("Common metrics"), L.T("All metrics"), L.T("Pinned"), L.T("Temperatures only"), L.T("Fans only"), L.T("Usage only"), L.T("Transfer rates only") }, SelectedItem = sensorKind, HorizontalAlignment = HorizontalAlignment.Stretch };
         kinds.SelectionChanged += (_, _) => { sensorKind = (string)kinds.SelectedItem;PopulateDevices();RefreshSensorRows(); };
         Grid.SetColumn(kinds, 1); filters.Children.Add(kinds);
-        deviceFilter = new ComboBox { PlaceholderText = "全部硬件", DisplayMemberPath = "Name", HorizontalAlignment = HorizontalAlignment.Stretch };
+        deviceFilter = new ComboBox { PlaceholderText = L.T("All hardware"), DisplayMemberPath = "Name", HorizontalAlignment = HorizontalAlignment.Stretch };
         deviceFilter.SelectionChanged += (_, _) =>
         { if (!synchronizingSelection) { deviceId = (deviceFilter.SelectedItem as DeviceOption)?.Id ?? ""; RefreshSensorRows(); } };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(deviceFilter,"具体硬件");
-        ToolTipService.SetToolTip(deviceFilter,"按具体硬件筛选");Grid.SetColumn(deviceFilter,2);filters.Children.Add(deviceFilter);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(deviceFilter,L.T("Hardware device"));
+        ToolTipService.SetToolTip(deviceFilter,L.T("Filter by hardware device"));Grid.SetColumn(deviceFilter,2);filters.Children.Add(deviceFilter);
         sensorFilterSummary=new StackPanel {Orientation=Orientation.Horizontal,Spacing=10,Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center};
         countText=Description("");countText.VerticalAlignment=VerticalAlignment.Center;sensorFilterSummary.Children.Add(countText);
-        unavailableFilter=new CheckBox {Content="显示无读数通道",IsChecked=showUnavailable,VerticalAlignment=VerticalAlignment.Center};
+        unavailableFilter=new CheckBox {Content=L.T("Show sensors without readings"),IsChecked=showUnavailable,VerticalAlignment=VerticalAlignment.Center};
         unavailableFilter.Checked+=(_,_)=>{showUnavailable=true;PopulateDevices();RefreshSensorRows();};
         unavailableFilter.Unchecked+=(_,_)=>{showUnavailable=false;PopulateDevices();RefreshSensorRows();};sensorFilterSummary.Children.Add(unavailableFilter);
         Grid.SetColumn(sensorFilterSummary,3);filters.Children.Add(sensorFilterSummary);PageContent.Children.Add(filters);
-        var search = new TextBox { PlaceholderText = "筛选名称、设备或传感器标识", Text = query };
+        var search = new TextBox { PlaceholderText = L.T("Filter by name, device or sensor identifier"), Text = query };
         search.TextChanged += (_, _) => { query = search.Text.Trim(); RefreshSensorRows(); };
         PageContent.Children.Add(search);
-        PageContent.Children.Add(Description("常用指标只保留整机占用、CPU/GPU 温度、各磁盘活动与读写、物理出口上下行。勾选可固定到任务栏（最多 8 项）。"));
+        PageContent.Children.Add(Description(L.T("Common metrics include overall usage, CPU/GPU temperatures, disk activity and transfers, and physical uplink traffic. Select up to 8 to pin.")));
         var header = new Grid { ColumnSpacing = 12, Padding = new Thickness(46, 6, 18, 4) };
         PageContent.Children.Add(header);
         sensorList = new ListView { ItemsSource = sensorRows, SelectionMode = ListViewSelectionMode.Multiple,
@@ -533,29 +536,29 @@ public sealed partial class MainWindow : Window
             if (selected.Count > 8)
             {
                 SynchronizePinned();
-                _ = MessageAsync("最多固定 8 个指标", "请先取消一个指标，再选择新的指标。"); return;
+                _ = MessageAsync(L.T("Up to 8 metrics can be pinned"), L.T("Unpin an existing metric before selecting another.")); return;
             }
             settings.PinnedSensors = selected.ToArray(); Save(); UpdateMonitor();
         };
         PageContent.Children.Add(Card(sensorList));
-        emptySensors = Description("暂无匹配的传感器。温度和主板风扇可尝试授权硬件访问；也可调整设备与指标筛选。");
+        emptySensors = Description(L.T("No sensors match these filters. Authorize hardware access for temperatures and motherboard fans, or adjust the filters."));
         PageContent.Children.Add(emptySensors);
         var names = new StackPanel { Spacing = 10 };
-        names.Children.Add(Description("传感器名称可以自定义；不会改变原始设备标识，也不会设置风扇转速。"));
-        var channel = new ComboBox { PlaceholderText = "选择已枚举的传感器", DisplayMemberPath = "DisplayName", HorizontalAlignment = HorizontalAlignment.Stretch,
+        names.Children.Add(Description(L.T("Custom display names do not change sensor identifiers or control fan speeds.")));
+        var channel = new ComboBox { PlaceholderText = L.T("Select a detected sensor"), DisplayMemberPath = "DisplayName", HorizontalAlignment = HorizontalAlignment.Stretch,
             ItemsSource = CustomizableSensors() };
         renameSelector = channel;
-        var rename = new TextBox { PlaceholderText = "输入显示名称，例如 CPU 风扇（留空还原）" };
+        var rename = new TextBox { PlaceholderText = L.T("Enter a display name, e.g. CPU fan (leave blank to reset)") };
         channel.SelectionChanged += (_, _) => { if (channel.SelectedItem is SensorReading reading) rename.Text = settings.SensorNames.GetValueOrDefault(reading.Id, ""); };
         names.Children.Add(channel); names.Children.Add(rename);
-        names.Children.Add(Button("保存名称", () =>
+        names.Children.Add(Button(L.T("Save name"), () =>
         {
             if (channel.SelectedItem is not SensorReading reading) return;
             string value = rename.Text.Trim();
             if (value.Length == 0) settings.SensorNames.Remove(reading.Id); else settings.SensorNames[reading.Id] = value[..Math.Min(value.Length, 48)];
             Save(); RefreshSensorRows(); UpdateMonitor();
         }));
-        PageContent.Children.Add(new Expander { Header = "自定义指标名称", Content = names, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
+        PageContent.Children.Add(new Expander { Header = L.T("Custom metric names"), Content = names, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
         PopulateDevices();
     }
 
@@ -563,9 +566,9 @@ public sealed partial class MainWindow : Window
     private void PopulateDevices()
     {
         if (deviceFilter is null) return;
-        var devices = SensorCatalog.Filter(snapshot,sensorKind,settings.PinnedSensors,showUnavailable).Where(s => category == "全部类别" || s.Category == category)
+        var devices = SensorCatalog.Filter(snapshot,sensorKind,settings.PinnedSensors,showUnavailable).Where(s => category == L.T("All categories") || s.Category == category)
             .GroupBy(s => s.HardwareId).Select(g => new DeviceOption(g.Key, g.First().Hardware)).OrderBy(d => d.Name).ToList();
-        devices.Insert(0,new("","全部硬件"));
+        devices.Insert(0,new("",L.T("All hardware")));
         if ((deviceFilter.ItemsSource as List<DeviceOption>)?.SequenceEqual(devices) == true) return;
         synchronizingSelection = true;
         try
@@ -580,9 +583,9 @@ public sealed partial class MainWindow : Window
     {
         if (sensorList is null) return;
         var desired = SensorCatalog.Filter(snapshot,sensorKind,settings.PinnedSensors,showUnavailable).Where(s=>
-            (category=="全部类别" || s.Category==category) && (deviceId.Length==0 || s.HardwareId==deviceId) &&
+            (category==L.T("All categories") || s.Category==category) && (deviceId.Length==0 || s.HardwareId==deviceId) &&
             (query.Length==0 || $"{s.Name} {s.DisplayName} {s.Hardware} {s.Id} {settings.SensorNames.GetValueOrDefault(s.Id)}".Contains(query,StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(s=>s.Category switch {"CPU"=>0,"GPU"=>1,"内存"=>2,"磁盘"=>3,"网络"=>4,_=>5})
+            .OrderBy(s=>s.Category switch {"CPU"=>0,"GPU"=>1,_ when s.Category == L.T("Memory") =>2,_ when s.Category == L.T("Disk") =>3,_ when s.Category == L.T("Network") =>4,_=>5})
             .ThenBy(s=>s.Hardware).ThenBy(s=>s.Kind).ThenBy(s=>s.Id).ToArray();
         synchronizingSelection = true;
         try
@@ -600,7 +603,7 @@ public sealed partial class MainWindow : Window
         }
         finally { synchronizingSelection = false; }
         SynchronizePinned();
-        if (countText is not null) countText.Text = $"{desired.Length} / {snapshot.Sensors.Length} 项 · 已固定 {settings.PinnedSensors.Length} 项";
+        if (countText is not null) countText.Text = L.F("{0} / {1} readings · {2} pinned", desired.Length, snapshot.Sensors.Length, settings.PinnedSensors.Length);
         if (emptySensors is not null) emptySensors.Visibility = desired.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
     private void SynchronizePinned()
@@ -623,22 +626,22 @@ public sealed partial class MainWindow : Window
     {
         var content=new StackPanel {Spacing=12};
         var header=new Grid {ColumnSpacing=12};header.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});header.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        header.Children.Add(new TextBlock {Text="任务栏预览",FontSize=16,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
+        header.Children.Add(new TextBlock {Text=L.T("Taskbar preview"),FontSize=16,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
         var actions=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
-        var desktop=new ComboBox {ItemsSource=new[]{"深色桌面","浅色桌面"},SelectedIndex=0,MinWidth=130};
-        actions.Children.Add(desktop);actions.Children.Add(Button("放大预览",()=>_=ShowTaskbarPreviewAsync()));Grid.SetColumn(actions,1);header.Children.Add(actions);
+        var desktop=new ComboBox {ItemsSource=new[]{L.T("Dark desktop"),L.T("Light desktop")},SelectedIndex=0,MinWidth=130};
+        actions.Children.Add(desktop);actions.Children.Add(Button(L.T("Expand preview"),()=>_=ShowTaskbarPreviewAsync()));Grid.SetColumn(actions,1);header.Children.Add(actions);
         taskbarPreview=new TaskbarPreview();desktop.SelectionChanged+=(_,_)=>taskbarPreview?.SetDesktop(desktop.SelectedIndex==0);
         ResponsiveHeader(header,actions,560);
-        content.Children.Add(header);content.Children.Add(taskbarPreview);content.Children.Add(Description("监控使用实时数据；预览同步当前布局、字体和配色，系统图标为示意。"));
+        content.Children.Add(header);content.Children.Add(taskbarPreview);content.Children.Add(Description(L.T("Monitoring uses live data. The preview follows the current layout, font and colors; system icons are illustrative.")));
         PageContent.Children.Add(Card(content));
     }
     private async Task ShowTaskbarPreviewAsync()
     {
         var preview=new TaskbarPreview {MinWidth=Math.Min(720,Math.Max(240,Root.ActualWidth-80)),MinHeight=230};expandedPreview=preview;
         var content=new StackPanel {Spacing=12};
-        var desktop=new ComboBox {ItemsSource=new[]{"深色桌面","浅色桌面"},SelectedIndex=0,HorizontalAlignment=HorizontalAlignment.Left};
+        var desktop=new ComboBox {ItemsSource=new[]{L.T("Dark desktop"),L.T("Light desktop")},SelectedIndex=0,HorizontalAlignment=HorizontalAlignment.Left};
         desktop.SelectionChanged+=(_,_)=>preview.SetDesktop(desktop.SelectedIndex==0);content.Children.Add(desktop);content.Children.Add(preview);
-        var dialog=new ContentDialog {Title="任务栏实时预览",Content=content,CloseButtonText="关闭",XamlRoot=Root.XamlRoot};
+        var dialog=new ContentDialog {Title=L.T("Live taskbar preview"),Content=content,CloseButtonText=L.T("Close"),XamlRoot=Root.XamlRoot};
         dialog.Resources["ContentDialogMaxWidth"]=1000d;
         UpdateMonitor();
         try
@@ -647,7 +650,7 @@ public sealed partial class MainWindow : Window
             if(smokeTest)
             {
                 await Task.Delay(600);
-                if(preview.MetricCount==0 || preview.MetricTexts.Any(text=>text.IsTextTrimmed || text.FontFamily.Source!=settings.MonitorFontFamily || text.FontWeight.Weight!=(settings.MonitorBold?700:400)))throw new IOException("放大预览中的指标为空、被截断或字体样式不匹配。");
+                if(preview.MetricCount==0 || preview.MetricTexts.Any(text=>text.IsTextTrimmed || text.FontFamily.Source!=settings.MonitorFontFamily || text.FontWeight.Weight!=(settings.MonitorBold?700:400)))throw new IOException(L.T("Expanded preview metrics are missing, trimmed, or use an incorrect font style."));
                 await RenderCheckImageAsync("taskbar-preview-large",preview);
                 preview.SetDesktop(false);await Task.Delay(150);await RenderCheckImageAsync("taskbar-preview-light",preview);dialog.Hide();
             }
@@ -657,11 +660,11 @@ public sealed partial class MainWindow : Window
     }
     private void AddColorSchemes()
     {
-        Heading("快速配色");
-        var scope=new ComboBox {ItemsSource=new[]{"监控指标","时间与系统图标","全部文字"},SelectedIndex=paletteScope==ColorScope.All?2:paletteScope==ColorScope.System?1:0,MinWidth=180};
+        Heading(L.T("Color presets"));
+        var scope=new ComboBox {ItemsSource=new[]{L.T("Monitor metrics"),L.T("Time & system icons"),L.T("All text")},SelectedIndex=paletteScope==ColorScope.All?2:paletteScope==ColorScope.System?1:0,MinWidth=180};
         scope.SelectionChanged+=(_,_)=>paletteScope=scope.SelectedIndex==2?ColorScope.All:scope.SelectedIndex==1?ColorScope.System:ColorScope.Monitor;
-        Row("配色范围","系统配色会同时开启对应的固定颜色开关。",scope,"\uE790");
-        Row("一键随机颜色","为所选范围生成一组不同的颜色。",Button("随机颜色",()=>ApplyColorScheme(ColorSchemes.Random()),true),"\uE8B1");
+        Row(L.T("Color scope"),L.T("Applying system colors also enables the corresponding fixed-color switches."),scope,"\uE790");
+        Row(L.T("Random colors"),L.T("Generate a different color for each item in the selected scope."),Button(L.T("Randomize"),()=>ApplyColorScheme(ColorSchemes.Random()),true),"\uE8B1");
         var schemes=new Grid {ColumnSpacing=10};
         for(int index=0;index<ColorSchemes.Presets.Count;index++)
         {
@@ -669,7 +672,7 @@ public sealed partial class MainWindow : Window
             var scheme=ColorSchemes.Presets[index];var content=new StackPanel {Spacing=10};
             var swatches=new StackPanel {Orientation=Orientation.Horizontal,Spacing=4};
             foreach(string color in scheme.Colors.Take(4))swatches.Children.Add(new Border {Width=18,Height=18,CornerRadius=new CornerRadius(5),Background=new SolidColorBrush(ParseColor(color))});
-            content.Children.Add(swatches);content.Children.Add(new TextBlock {Text=scheme.Name});
+            content.Children.Add(swatches);content.Children.Add(new TextBlock {Text=L.T(scheme.Name)});
             var button=new Button {Content=content,Padding=new Thickness(14,12,14,12),HorizontalAlignment=HorizontalAlignment.Stretch};
             button.Click+=(_,_)=>ApplyColorScheme(scheme);Grid.SetColumn(button,index);schemes.Children.Add(button);
         }
@@ -685,9 +688,9 @@ public sealed partial class MainWindow : Window
     {
         AddTaskbarPreview();
         AddColorSchemes();
-        Heading("监控文字");
-        AddColorPicker("默认文字颜色", settings.MonitorColor, hex => settings.MonitorColor = hex);
-        var selection = new ComboBox { DisplayMemberPath="DisplayName", PlaceholderText="选择指标", HorizontalAlignment=HorizontalAlignment.Stretch,
+        Heading(L.T("Monitor text"));
+        AddColorPicker(L.T("Default text color"), settings.MonitorColor, hex => settings.MonitorColor = hex);
+        var selection = new ComboBox { DisplayMemberPath="DisplayName", PlaceholderText=L.T("Select a metric"), HorizontalAlignment=HorizontalAlignment.Stretch,
             ItemsSource=CustomizableSensors() };
         metricColorSelector=selection;
         var picker=new ColorPicker { IsAlphaEnabled=false,Color=ParseColor(settings.MonitorColor) };
@@ -702,26 +705,26 @@ public sealed partial class MainWindow : Window
             settings.SensorColors[reading.Id]=$"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}";TaskbarChanged();
         };
         var actions=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
-        actions.Children.Add(new Button {Content="选择颜色",Flyout=new Flyout{Content=picker}});
-        actions.Children.Add(Button("跟随默认",()=>{if(selection.SelectedItem is SensorReading reading){settings.SensorColors.Remove(reading.Id);TaskbarChanged();updating=true;picker.Color=ParseColor(settings.MonitorColor);updating=false;}}));
+        actions.Children.Add(new Button {Content=L.T("Choose color"),Flyout=new Flyout{Content=picker}});
+        actions.Children.Add(Button(L.T("Use default color"),()=>{if(selection.SelectedItem is SensorReading reading){settings.SensorColors.Remove(reading.Id);TaskbarChanged();updating=true;picker.Color=ParseColor(settings.MonitorColor);updating=false;}}));
         var perMetric=new StackPanel {Spacing=10};perMetric.Children.Add(selection);perMetric.Children.Add(actions);
-        Row("每个指标的文字颜色", "颜色按传感器标识保存，同一指标在内嵌区域与独立窗中使用相同颜色。", new TextBlock(), "\uE790");
+        Row(L.T("Per-metric text colors"), L.T("Colors are stored by sensor identifier and shared by embedded and floating monitors."), new TextBlock(), "\uE790");
         PageContent.Children.Add(Card(perMetric));
         AddMonitorLayoutControls();
-        Heading("独立监控窗背景");
-        AddColorPicker("独立窗背景颜色", settings.MonitorBackground, hex => settings.MonitorBackground = hex);
+        Heading(L.T("Floating monitor background"));
+        AddColorPicker(L.T("Floating window background color"), settings.MonitorBackground, hex => settings.MonitorBackground = hex);
         var opacity = new Slider { Minimum = 30, Maximum = 100, Value = settings.MonitorOpacity, StepFrequency = 1, Width = 200 };
         opacity.ValueChanged += (_, args) => { settings.MonitorOpacity = (int)args.NewValue; Save(); UpdateMonitor(); };
-        Row("独立窗不透明度", "仅用于独立监控窗，任务栏背景请在任务栏外观页面设置。", opacity, "\uE790");
-        Heading("系统任务栏文字与图标");
-        taskbarInfo=Notice("系统前景色", "支持时间、日期和系统单色图标；第三方程序的彩色托盘图标保留原样。");
-        SystemColorRow("时间","\uE917",settings.TimeColor,settings.TimeColorEnabled,v=>settings.TimeColorEnabled=v,v=>settings.TimeColor=v);
-        SystemColorRow("日期","\uE787",settings.DateColor,settings.DateColorEnabled,v=>settings.DateColorEnabled=v,v=>settings.DateColor=v);
-        SystemColorRow("系统托盘字形","\uE971",settings.TrayColor,settings.TrayColorEnabled,v=>settings.TrayColorEnabled=v,v=>settings.TrayColor=v);
-        SystemColorRow("网络图标","\uE839",settings.NetworkColor,settings.NetworkColorEnabled,v=>settings.NetworkColorEnabled=v,v=>settings.NetworkColor=v);
-        SystemColorRow("声音图标","\uE767",settings.VolumeColor,settings.VolumeColorEnabled,v=>settings.VolumeColorEnabled=v,v=>settings.VolumeColor=v);
-        SystemColorRow("输入法与语言指示","\uE765",settings.InputColor,settings.InputColorEnabled,v=>settings.InputColorEnabled=v,v=>settings.InputColor=v);
-        SystemColorRow("电池图标","\uE83F",settings.BatteryColor,settings.BatteryColorEnabled,v=>settings.BatteryColorEnabled=v,v=>settings.BatteryColor=v);
+        Row(L.T("Floating monitor opacity"), L.T("Applies only to the floating monitor. Configure the taskbar background on the Taskbar page."), opacity, "\uE790");
+        Heading(L.T("System taskbar text & icons"));
+        taskbarInfo=Notice(L.T("System foreground colors"), L.T("Supports time, date and monochrome system icons. Third-party color tray bitmaps retain their original appearance."));
+        SystemColorRow(L.T("Time"),"\uE917",settings.TimeColor,settings.TimeColorEnabled,v=>settings.TimeColorEnabled=v,v=>settings.TimeColor=v);
+        SystemColorRow(L.T("Date"),"\uE787",settings.DateColor,settings.DateColorEnabled,v=>settings.DateColorEnabled=v,v=>settings.DateColor=v);
+        SystemColorRow(L.T("System tray glyphs"),"\uE971",settings.TrayColor,settings.TrayColorEnabled,v=>settings.TrayColorEnabled=v,v=>settings.TrayColor=v);
+        SystemColorRow(L.T("Network icon"),"\uE839",settings.NetworkColor,settings.NetworkColorEnabled,v=>settings.NetworkColorEnabled=v,v=>settings.NetworkColor=v);
+        SystemColorRow(L.T("Volume icon"),"\uE767",settings.VolumeColor,settings.VolumeColorEnabled,v=>settings.VolumeColorEnabled=v,v=>settings.VolumeColor=v);
+        SystemColorRow(L.T("Input method & language"),"\uE765",settings.InputColor,settings.InputColorEnabled,v=>settings.InputColorEnabled=v,v=>settings.InputColor=v);
+        SystemColorRow(L.T("Battery icon"),"\uE83F",settings.BatteryColor,settings.BatteryColorEnabled,v=>settings.BatteryColorEnabled=v,v=>settings.BatteryColor=v);
     }
     private void SystemColorRow(string title,string glyph,string color,bool enabled,Action<bool> toggle,Action<string> change)
     {
@@ -731,7 +734,7 @@ public sealed partial class MainWindow : Window
         var controls=new StackPanel {Orientation=Orientation.Horizontal,Spacing=12};
         controls.Children.Add(new Button {Content=label,Flyout=new Flyout {Content=picker},VerticalAlignment=VerticalAlignment.Center});
         controls.Children.Add(Toggle(enabled,value=>{toggle(value);TaskbarChanged();}));
-        Row(title,"开启后使用固定颜色，关闭后跟随系统。单项颜色优先于通用颜色。",controls,glyph);
+        Row(title,L.T("Enable a fixed color or disable it to follow Windows. Individual colors override the general tray color."),controls,glyph);
     }
     private void AddColorPicker(string title, string value, Action<string> changed)
     {
@@ -744,33 +747,34 @@ public sealed partial class MainWindow : Window
             changed(hex); hexText.Text = hex; TaskbarChanged();
         };
         var button = new Button { Content = hexText, Flyout = new Flyout { Content = picker } };
-        Row(title, "点击打开颜色选择器，实时预览。", button, "\uE790");
+        Row(title, L.T("Open the color picker to preview changes immediately."), button, "\uE790");
     }
     private static Color ParseColor(string hex) => Color.FromArgb(255, Convert.ToByte(hex[1..3], 16), Convert.ToByte(hex[3..5], 16), Convert.ToByte(hex[5..7], 16));
     private void BuildGeneral()
     {
-        var theme = new ComboBox { ItemsSource = new[] { "跟随系统", "浅色", "深色" }, SelectedIndex = settings.Theme switch { "Light" => 1, "Dark" => 2, _ => 0 }, MinWidth = 150 };
+        AddLanguageControl();
+        var theme = new ComboBox { ItemsSource = new[] { L.T("Follow system"), L.T("Light"), L.T("Dark") }, SelectedIndex = settings.Theme switch { "Light" => 1, "Dark" => 2, _ => 0 }, MinWidth = 150 };
         theme.SelectionChanged += (_, _) => { settings.Theme = theme.SelectedIndex switch { 1 => "Light", 2 => "Dark", _ => "System" }; ApplyTheme(); Save(); };
-        Row("应用主题", "使用 Windows 原生控件，支持系统浅色和深色。", theme, "\uE790");
-        var interval = new ComboBox { ItemsSource = new[] { "0.5 秒", "1 秒", "2 秒", "5 秒" }, SelectedIndex = settings.IntervalMs switch { 500 => 0, 2000 => 2, 5000 => 3, _ => 1 }, MinWidth = 150 };
+        Row(L.T("App theme"), L.T("Native Windows controls with light and dark themes."), theme, "\uE790");
+        var interval = new ComboBox { ItemsSource = new[] { L.T("0.5 seconds"), L.T("1 second"), L.T("2 seconds"), L.T("5 seconds") }, SelectedIndex = settings.IntervalMs switch { 500 => 0, 2000 => 2, 5000 => 3, _ => 1 }, MinWidth = 150 };
         interval.SelectionChanged += (_, _) => { settings.IntervalMs = new[] { 500, 1000, 2000, 5000 }[interval.SelectedIndex]; if (broker is not null) broker.IntervalMs = settings.IntervalMs; Save(); };
-        Row("启动时请求硬件访问","仅独立采集器需要管理员权限，Windows 会显示授权提示；关闭后使用基础采集。",
+        Row(L.T("Request hardware access at startup"),L.T("Only the sensor process requires administrator access. Windows will ask for authorization. Disable this option to use basic monitoring."),
             Toggle(settings.HardwareAccessEnabled,value=>{settings.HardwareAccessEnabled=value;Save();_=ConnectAsync(value);}),"\uEA18");
-        Row("采样间隔", "采集在独立进程执行；温度、转速等随硬件更新。", interval, "\uE916");
-        Row("关闭窗口时保留监控", "点击关闭后隐藏到系统托盘；可从托盘菜单彻底退出。",
+        Row(L.T("Sampling interval"), L.T("Samples run in a separate process. Temperatures and fan speeds update according to the hardware."), interval, "\uE916");
+        Row(L.T("Keep monitoring when the window closes"), L.T("Closing hides the window in the system tray. Use the tray menu to quit completely."),
             Toggle(settings.CloseToTray, value => { settings.CloseToTray = value; Save(); }), "\uE73F");
-        Heading("文件与数据");
-        Row("配置与运行数据", AppPaths.Data, Button("打开目录", () => OpenFolder(AppPaths.Data)), "\uE8B7");
-        Row("诊断记录", "导出当前采集状态与传感器快照，保存在 E 盘日志目录。", Button("导出诊断", ExportDiagnostics), "\uE9D9");
-        Row("彻底退出", "关闭监控窗、撤销任务栏试验并断开采集进程。", Button("退出澄栏", () => _ = QuitAsync()), "\uE8BB");
+        Heading(L.T("Files & data"));
+        Row(L.T("Settings & runtime data"), AppPaths.Data, Button(L.T("Open folder"), () => OpenFolder(AppPaths.Data)), "\uE8B7");
+        Row(L.T("Diagnostic records"), L.T("Export the current monitoring state and sensor snapshot to the logs directory."), Button(L.T("Export diagnostics"), ExportDiagnostics), "\uE9D9");
+        Row(L.T("Quit application"), L.T("Close monitors, restore the taskbar and disconnect the sensor process."), Button(L.T("Quit ClariBar"), () => _ = QuitAsync()), "\uE8BB");
     }
     private void BuildAbout()
     {
-        BuildProjectAbout();Heading("技术与开源依赖");
-        Row("技术组成", "WinUI + .NET 设置界面，C++ 原生托盘与监控窗，独立 LibreHardwareMonitor 采集进程。", new TextBlock(), "\uE943");
-        Row("硬件数据", "温度和风扇可能需要管理员权限。核显没有独立风扇时不显示 GPU 风扇；不以 CPU 温度代替 GPU 温度。", new TextBlock(), "\uE9D9");
-        Row("风扇通道", "0 RPM 可能表示停转或未连接；分线器可能只回传一个转速。当前只读，不控制风扇转速。", new TextBlock(), "\uE9CE");
-        Row("开源依赖", "LibreHardwareMonitor：MPL-2.0；Windows App SDK、.NET 等依赖许可随构建输出保留。", Button("查看软件目录",()=>OpenFolder(AppContext.BaseDirectory)), "\uE8A5");
+        BuildProjectAbout();Heading(L.T("Technology & dependencies"));
+        Row(L.T("Technology"), L.T("WinUI and .NET settings, native C++ tray and monitor windows, and an independent LibreHardwareMonitor sensor process."), new TextBlock(), "\uE943");
+        Row(L.T("Hardware readings"), L.T("Some temperatures and fans require administrator access. Integrated GPUs without a fan do not report GPU fan speed. CPU temperature never substitutes for GPU temperature."), new TextBlock(), "\uE9D9");
+        Row(L.T("Fan channels"), L.T("0 RPM can mean a stopped or disconnected fan. Splitters may expose only one speed channel. Monitoring is read-only and does not control fan speeds."), new TextBlock(), "\uE9CE");
+        Row(L.T("Open-source dependencies"), L.T("LibreHardwareMonitor: MPL-2.0. Windows App SDK, .NET and other dependency licenses are included with the application."), Button(L.T("Open application folder"),()=>OpenFolder(AppContext.BaseDirectory)), "\uE8A5");
     }
 
     private void ApplyTheme() => Root.RequestedTheme = settings.Theme switch
@@ -778,7 +782,7 @@ public sealed partial class MainWindow : Window
     private void Save()
     {
         try { store.Save(settings); }
-        catch (Exception ex) { connection = $"配置未保存：{ex.Message}"; if (statusText is not null) statusText.Text = connection; }
+        catch (Exception ex) { connection = L.F("Settings could not be saved: {0}", ex.Message); if (statusText is not null) statusText.Text = connection; }
     }
     private SensorReading? Find(Func<SensorReading, bool> predicate) => snapshot.Sensors.FirstOrDefault(s => s.IsValid && predicate(s));
     private SensorReading[] CustomizableSensors()=>SensorCatalog.Common(snapshot).Concat(snapshot.Sensors.Where(sensor=>settings.PinnedSensors.Contains(sensor.Id)))
@@ -789,7 +793,7 @@ public sealed partial class MainWindow : Window
         bool fresh=snapshot.IsFresh;
         UpdateHardwareAction();
         if (statusText is not null)
-            statusText.Text = $"{connection}\n{(snapshot.Sensors.Length > 0 ? $"{snapshot.Sensors.Length} 个传感器条目 · 最近采样 {snapshot.CapturedAt.ToLocalTime():HH:mm:ss}" : "尚未收到硬件数据")}\n{(fresh ? "" : "读数未就绪或已过期。")}";
+            statusText.Text = $"{connection}\n{(snapshot.Sensors.Length > 0 ? L.F("{0} sensor readings · Last sample {1:HH:mm:ss}", snapshot.Sensors.Length, snapshot.CapturedAt.ToLocalTime()) : L.T("Waiting for hardware data"))}\n{(fresh ? "" : L.T("Readings are not ready or are stale."))}";
         if (cpuValue is not null) cpuValue.Text = SensorFormatting.Value(Find(s => s.HardwareType == "Cpu" && s.Kind == "Load" && s.Name.Contains("Total")), fresh);
         if (temperatureValue is not null) temperatureValue.Text = SensorFormatting.Value(Find(s => s.HardwareType == "Cpu" && s.Kind == "Temperature" && s.Name == "CPU Package"), fresh);
         if (gpuValue is not null) gpuValue.Text = SensorFormatting.Value(Find(s => s.Category == "GPU" && s.Kind == "Load" && s.Name.Contains("3D")), fresh);
@@ -802,24 +806,24 @@ public sealed partial class MainWindow : Window
         {
             accessInfo.Title=HardwareStatusText();
             accessInfo.Message = !fresh || snapshot.Sensors.Length == 0 ? connection
-                : snapshot.Errors.Length > 0 ? string.Join("；", snapshot.Errors.Take(2))
-                : snapshot.Elevated ? "CPU 温度、主板风扇等按实际支持情况显示；不可用指标保留 —。"
-                : "CPU、GPU、内存和物理出口网速已可用；授权后可读取 CPU 温度、核心频率和磁盘详细数据。";
+                : snapshot.Errors.Length > 0 ? string.Join(Localizer.IsChinese?"；":"; ", snapshot.Errors.Take(2).Select(L.T))
+                : snapshot.Elevated ? L.T("CPU temperatures and motherboard fans depend on hardware support. Unavailable readings remain —.")
+                : L.T("CPU, GPU, memory and physical network traffic are available. Authorize hardware access for CPU temperatures, core clocks and detailed disk readings.");
             if(accessFallbackNotice is not null)accessInfo.Message=accessFallbackNotice+"\n"+accessInfo.Message;
             accessInfo.Severity=snapshot.Errors.Length>0 || accessFallbackNotice is not null || connectionPhase is BrokerPhase.Failed or BrokerPhase.Cancelled?InfoBarSeverity.Warning:
                 connectionPhase==BrokerPhase.Connected && fresh && snapshot.Elevated?InfoBarSeverity.Success:InfoBarSeverity.Informational;
         }
         if(accessInfo is not null && fresh)
         {
-            var issues=snapshot.Capabilities.Where(capability=>capability.Status!="valid" && capability.Label.EndsWith("温度")).ToArray();
-            if(issues.Length>0)accessInfo.Message+="\n"+string.Join("；",issues.Select(capability=>$"{capability.Label}：{capability.Explanation}"));
+            var issues=snapshot.Capabilities.Where(capability=>capability.Status!="valid" && capability.Key.EndsWith("/Temperature",StringComparison.Ordinal)).ToArray();
+            if(issues.Length>0)accessInfo.Message+="\n"+string.Join(Localizer.IsChinese?"；":"; ",issues.Select(capability=>L.F("{0}: {1}",capability.DisplayLabel,L.T(capability.Explanation))));
         }
         if(networkInfo is not null)
         {
             var route=snapshot.Network;
-            networkInfo.Title=route is {InterfaceIndex:>0}?$"物理出口：{route.Name}":"默认物理出口";
-            networkInfo.Message=route is null?"尚未收到物理出口数据。":route.InterfaceIndex==0?route.Message:
-                $"{route.Description} · 接口 {route.InterfaceIndex} · 已排除 {route.ExcludedAdapters} 个虚拟或非物理接口。上下行统计物理出口的全部流量。";
+            networkInfo.Title=route is {InterfaceIndex:>0}?L.F("Physical uplink: {0}", route.Name):L.T("Default physical uplink");
+            networkInfo.Message=route is null?L.T("Physical uplink data has not arrived."):route.InterfaceIndex==0?L.T(route.Message):
+                L.F("{0} · Interface {1} · {2} virtual or nonphysical interfaces excluded. Traffic includes all transfers through the physical uplink.", route.Description, route.InterfaceIndex, route.ExcludedAdapters);
             networkInfo.Severity=route is {InterfaceIndex:>0}?InfoBarSeverity.Informational:InfoBarSeverity.Warning;
         }
         if (page == "sensors")
@@ -846,7 +850,7 @@ public sealed partial class MainWindow : Window
         taskbarPreview?.Update(settings,config);expandedPreview?.Update(settings,config);
         if(!nativeReady)return;
         Native.CB_XamlConfigure(ref config);
-        string text=config.MetricCount==0?"澄栏 · 等待监控数据":string.Join("    ",config.Metrics.Take((int)config.MetricCount).Select(metric=>metric.Text));
+        string text=config.MetricCount==0?L.T("ClariBar · Waiting for monitoring data"):string.Join("    ",config.Metrics.Take((int)config.MetricCount).Select(metric=>metric.Text));
         Native.CB_SetMonitor(text,Native.ColorRef(settings.MonitorColor),Native.ColorRef(settings.MonitorBackground),settings.MonitorOpacity,settings.MiniMonitorEnabled?1:0);
     }
     private void ExportDiagnostics()
@@ -858,17 +862,17 @@ public sealed partial class MainWindow : Window
             taskbar.Refresh();
             File.WriteAllText(Path.ChangeExtension(path,"tree.txt"),Native.ReadTaskbarTree());
             File.WriteAllText(path, JsonSerializer.Serialize(new
-            { version = "0.6.2", system = Environment.OSVersion.VersionString, connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
+            { version = "0.7.0", system = Environment.OSVersion.VersionString, connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
                 new JsonSerializerOptions(Wire.Json) { WriteIndented = true }));
-            _ = MessageAsync("诊断已导出", path);
+            _ = MessageAsync(L.T("Diagnostics exported"), path);
         }
-        catch (Exception ex) { _ = MessageAsync("无法导出诊断", ex.Message); }
+        catch (Exception ex) { _ = MessageAsync(L.T("Could not export diagnostics"), ex.Message); }
     }
     private static void OpenFolder(string path)
     { Directory.CreateDirectory(path); Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true }); }
     private async Task MessageAsync(string title, string message)
     {
-        var dialog = new ContentDialog { Title = title, Content = message, CloseButtonText = "确定", XamlRoot = Root.XamlRoot };
+        var dialog = new ContentDialog { Title = title, Content = message, CloseButtonText = L.T("OK"), XamlRoot = Root.XamlRoot };
         try { await dialog.ShowAsync(); } catch (InvalidOperationException) { }
     }
     private void ShowSettings() { Native.ShowWindow(hwnd, 9); Activate(); Native.SetForegroundWindow(hwnd); }
@@ -918,7 +922,7 @@ public sealed partial class MainWindow : Window
         PageContent.Children.Add(preview);
         var sample=new AppSettings {MonitorFontFamily="Microsoft YaHei UI",MonitorBold=true};
         var config=TaskbarConfig.Empty();config.Layout=2;config.MetricCount=6;config.BackgroundMode=1;
-        string[] labels=["CPU 4.16 %","CPU 核心温度 38 °C","内存 23.86 %","上传 9 KiB/s","下载 97.5 KiB/s","磁盘占用 0.98 %"];
+        string[] labels=["CPU 4.16 %",L.T("CPU core temperature 38 °C"),L.T("Memory 23.86 %"),L.T("Upload 9 KiB/s"),L.T("Download 97.5 KiB/s"),L.T("Disk usage 0.98 %")];
         for(int i=0;i<labels.Length;i++)config.Metrics[i]=new(){Text=labels[i],Color=0xff70d8ee};
         var checks=new List<object>();
         foreach(int size in new[]{8,15,24})
@@ -927,7 +931,7 @@ public sealed partial class MainWindow : Window
             await RenderCheckImageAsync($"monitor-alignment-{size}",preview);
             checks.Add(new{font=size,height=preview.TaskbarHeight,up=preview.UpShift,image=$"monitor-alignment-{size}.png"});
         }
-        config.Metrics[3].Text="上传 gjpq Â 9 KiB/s";sample.MonitorFontSize=24;
+        config.Metrics[3].Text=L.T("Upload gjpq Â 9 KiB/s");sample.MonitorFontSize=24;
         preview.Update(sample,config);await Task.Delay(250);await RenderCheckImageAsync("monitor-alignment-descenders",preview);
         checks.Add(new{font=24,height=preview.TaskbarHeight,up=preview.UpShift,image="monitor-alignment-descenders.png"});
         File.WriteAllText(Path.Combine(AppPaths.Logs,"claribar-preview-layout.json"),JsonSerializer.Serialize(checks,new JsonSerializerOptions(Wire.Json){WriteIndented=true}));
@@ -952,8 +956,7 @@ public sealed partial class MainWindow : Window
             PageScroll.ChangeView(null,PageScroll.ScrollableHeight,null,true);await Task.Delay(250);
             await RenderCheckImageAsync("system-color-icons");
             await CaptureMonitorAlignmentAsync();
-            await CheckShellAsync();
-            await CheckProjectAboutAsync();
+            await CheckLocalizationAsync();
             settings.Theme = "Dark"; ApplyTheme(); Nav.SelectedItem = Nav.MenuItems[0]; await Task.Delay(500);
             await RenderCheckImageAsync("overview-dark");
             settings.Theme = "Light"; ApplyTheme(); await Task.Delay(300);

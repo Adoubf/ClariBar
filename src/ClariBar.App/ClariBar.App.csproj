@@ -10,7 +10,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.6.2</Version>
+    <Version>0.7.0</Version>
     <ApplicationIcon>..\..\assets\branding\ClariBar.ico</ApplicationIcon>
     <AssemblyName>ClariBar</AssemblyName>
     <Authors>Haoyue</Authors>

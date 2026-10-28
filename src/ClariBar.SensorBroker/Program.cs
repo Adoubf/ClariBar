@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.IO.Pipes;
 using System.Security.Principal;
 using System.Security.AccessControl;
@@ -24,7 +25,7 @@ Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
 using var collector = new HardwareCollector();
 // Elevated tokens can have Administrators as their default object owner. Set the
 // actual user's SID as owner so CurrentUserOnly clients can verify the server.
-var user = identity.User ?? throw new InvalidOperationException("缺少当前用户标识。");
+var user = identity.User ?? throw new InvalidOperationException(L.T("The current user identifier is missing."));
 var security = new PipeSecurity();
 security.SetOwner(user);
 security.SetAccessRuleProtection(true, false);

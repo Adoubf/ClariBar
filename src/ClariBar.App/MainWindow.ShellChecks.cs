@@ -42,6 +42,7 @@ public sealed partial class MainWindow
                 foreach(var item in Nav.MenuItems.OfType<NavigationViewItem>())
                 {
                     Nav.SelectedItem=item;await Task.Delay(260);
+                    CheckShortcutTooltips();
                     var failures=new List<string>();
                     foreach(var element in layoutControls.Concat(PageContent.Children.OfType<FrameworkElement>()))
                     {

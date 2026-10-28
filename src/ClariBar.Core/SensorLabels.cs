@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using System.Text.RegularExpressions;
 
 namespace ClariBar.Core;
@@ -32,14 +33,15 @@ public static class SensorLabels
 
     public static string Kind(string kind) => kind switch
     {
-        "Temperature"=>"温度", "Load"=>"占用", "Clock"=>"频率", "Frequency"=>"频率", "Fan"=>"转速",
-        "Throughput"=>"速率", "Data" or "SmallData"=>"容量", "Power"=>"功耗", "Voltage"=>"电压",
-        "Control"=>"控制反馈", "Level"=>"水平", "Current"=>"电流", "Factor"=>"系数", "TimeSpan"=>"时长",
-        "Energy"=>"能量", "Noise"=>"噪声", "Conductivity"=>"电导率", "Humidity"=>"湿度", _=>"参数"
+        "Temperature"=>L.T("Temperature"), "Load"=>L.T("Usage"), "Clock"=>L.T("Frequency"), "Frequency"=>L.T("Frequency"), "Fan"=>L.T("Fan speed"),
+        "Throughput"=>L.T("Transfer rate"), "Data" or "SmallData"=>L.T("Capacity"), "Power"=>L.T("Power"), "Voltage"=>L.T("Voltage"),
+        "Control"=>L.T("Control feedback"), "Level"=>L.T("Level"), "Current"=>L.T("Current"), "Factor"=>L.T("Factor"), "TimeSpan"=>L.T("Duration"),
+        "Energy"=>L.T("Energy"), "Noise"=>L.T("Noise"), "Conductivity"=>L.T("Conductivity"), "Humidity"=>L.T("Humidity"), _=>L.T("Parameter")
     };
 
     public static string Name(SensorReading sensor)
     {
+        if(!Localizer.IsChinese)return EnglishName(sensor);
         string raw = sensor.Name.Trim();
         string name;
         if (!Names.TryGetValue(raw, out name!))
@@ -66,14 +68,34 @@ public static class SensorLabels
         return name;
     }
 
+    private static string EnglishName(SensorReading sensor)
+    {
+        string raw=sensor.Name.Trim();
+        return (raw,sensor.Kind) switch
+        {
+            ("CPU Total","Load")=>"CPU total usage",
+            ("CPU Package","Temperature")=>"CPU temperature",
+            ("GPU Core","Load")=>"GPU usage",
+            ("D3D 3D","Load")=>"GPU 3D usage",
+            ("GPU Core","Temperature")=>"GPU temperature",
+            ("GPU Core","Clock")=>"GPU clock",
+            ("Memory","Load")=>"Memory usage",
+            ("Total Activity","Load")=>"Disk usage",
+            ("Read Rate","Throughput")=>"Read speed",
+            ("Write Rate","Throughput")=>"Write speed",
+            ("Upload Speed","Throughput")=>"Upload speed",
+            ("Download Speed","Throughput")=>"Download speed",
+            _=>Regex.Replace(raw,@"#(?=\d)","")
+        };
+    }
     public static string Compact(SensorReading sensor) => sensor switch
     {
         { HardwareType: "Cpu", Kind: "Load", Name: "CPU Total" } => "CPU",
-        { HardwareType: "GpuIntel" or "GpuNvidia" or "GpuAmd", Kind: "Clock", Name: "GPU Core" } => "GPU 频率",
-        { HardwareType: "Memory", Kind: "Load", Name: "Memory" } => "内存",
-        { Name: "CPU Package", Kind: "Temperature" } => "CPU 温度",
-        { Kind: "Throughput" } when sensor.Name.Contains("Upload") => "上传",
-        { Kind: "Throughput" } when sensor.Name.Contains("Download") => "下载",
+        { HardwareType: "GpuIntel" or "GpuNvidia" or "GpuAmd", Kind: "Clock", Name: "GPU Core" } => L.T("GPU clock"),
+        { HardwareType: "Memory", Kind: "Load", Name: "Memory" } => L.T("Memory"),
+        { Name: "CPU Package", Kind: "Temperature" } => L.T("CPU temperature"),
+        { Kind: "Throughput" } when sensor.Name.Contains("Upload") => L.T("Upload"),
+        { Kind: "Throughput" } when sensor.Name.Contains("Download") => L.T("Download"),
         _ => Name(sensor)
     };
 }

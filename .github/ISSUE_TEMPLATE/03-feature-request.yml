@@ -1,0 +1,32 @@
+name: Feature request (English)
+description: Suggest a feature or improvement and explain the use case.
+title: '[Feature] '
+body:
+- type: markdown
+  attributes:
+    value: Explain the real use case and the desired behavior. The use case and proposed behavior are
+      required.
+- type: textarea
+  id: use_case
+  attributes:
+    label: Use case and current limitation
+    placeholder: What are you trying to do, and what makes the current behavior inconvenient?
+  validations:
+    required: true
+- type: textarea
+  id: proposal
+  attributes:
+    label: Proposed behavior
+    placeholder: Describe the desired controls, appearance or workflow.
+  validations:
+    required: true
+- type: textarea
+  id: alternatives
+  attributes:
+    label: Alternatives considered (optional)
+- type: textarea
+  id: context
+  attributes:
+    label: Examples, screenshots and extra context (optional)
+    description: You can include reference images or examples. Check for sensitive information before
+      uploading.

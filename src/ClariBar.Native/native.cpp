@@ -13,7 +13,7 @@
 #include "text_ink.h"
 
 namespace {
-constexpr UINT trayMessage = WM_APP + 1, updateMessage = WM_APP + 2;
+constexpr UINT trayMessage = WM_APP + 1, updateMessage = WM_APP + 2, languageMessage = WM_APP + 3;
 constexpr UINT iconId = 1;
 using Callback = void(__stdcall*)(int);
 std::thread worker;
@@ -29,11 +29,13 @@ int fontPixels{};
 std::wstring fontFamily;
 bool fontBold{};
 std::vector<int> cellWidths;
-std::wstring monitorText = L"澄栏 · 等待数据";
+std::wstring monitorText = L"ClariBar · Waiting for data";
 COLORREF foreground = RGB(255,255,255), background = RGB(32,32,32);
 BYTE alpha = 235;
 bool shown{}, positioned{};
 std::atomic<bool> running{};
+std::atomic<bool> chinese{};
+const wchar_t* Tr(const wchar_t* english,const wchar_t* simplified){return chinese.load()?simplified:english;}
 int transparencyMode{};
 BYTE taskbarAlpha = 128;
 std::vector<HWND> modified;
@@ -50,7 +52,7 @@ void AddTray() {
     data.hWnd=host; data.uID=iconId;
     data.uFlags=NIF_ICON|NIF_MESSAGE|NIF_TIP;
     data.hIcon=icon; data.uCallbackMessage=trayMessage;
-    wcscpy_s(data.szTip,L"澄栏 ClariBar · 双击打开设置");
+    wcscpy_s(data.szTip,Tr(L"ClariBar · Double-click to open settings",L"澄栏 ClariBar · 双击打开设置"));
     Shell_NotifyIconW(NIM_ADD,&data);
     data.uVersion=NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION,&data);
@@ -180,6 +182,11 @@ void PositionMonitor() {
 }
 
 LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) {
+    if(message==languageMessage) {
+        NOTIFYICONDATAW data{sizeof(data)};data.hWnd=host;data.uID=iconId;data.uFlags=NIF_TIP;
+        wcscpy_s(data.szTip,Tr(L"ClariBar · Double-click to open settings",L"澄栏 ClariBar · 双击打开设置"));
+        Shell_NotifyIconW(NIM_MODIFY,&data);return 0;
+    }
     if(message==showRequested) {Notify(1);return 0;}
     if(message==quitRequested) {Notify(2);return 0;}
     if(message==WM_TIMER){ClariBridgeHeartbeat();return 0;}
@@ -189,10 +196,10 @@ LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) 
         if(event==WM_LBUTTONDBLCLK || event==NIN_SELECT || event==NIN_KEYSELECT) Notify(1);
         if(event==WM_CONTEXTMENU || event==WM_RBUTTONUP) {
             POINT point{};GetCursorPos(&point);HMENU menu=CreatePopupMenu();
-            AppendMenuW(menu,MF_STRING,1,L"打开澄栏设置");
-            AppendMenuW(menu,MF_STRING,3,shown?L"隐藏监控窗":L"显示监控窗");
-            AppendMenuW(menu,MF_STRING,4,ClariLocalConfig().embedded?L"隐藏任务栏监控":L"显示任务栏监控");
-            AppendMenuW(menu,MF_SEPARATOR,0,nullptr);AppendMenuW(menu,MF_STRING,2,L"退出澄栏");
+            AppendMenuW(menu,MF_STRING,1,Tr(L"Open ClariBar settings",L"打开澄栏设置"));
+            AppendMenuW(menu,MF_STRING,3,shown?Tr(L"Hide floating monitor",L"隐藏监控窗"):Tr(L"Show floating monitor",L"显示监控窗"));
+            AppendMenuW(menu,MF_STRING,4,ClariLocalConfig().embedded?Tr(L"Hide taskbar monitor",L"隐藏任务栏监控"):Tr(L"Show taskbar monitor",L"显示任务栏监控"));
+            AppendMenuW(menu,MF_SEPARATOR,0,nullptr);AppendMenuW(menu,MF_STRING,2,Tr(L"Quit ClariBar",L"退出澄栏"));
             SetForegroundWindow(window);
             auto result=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY,point.x,point.y,0,window,nullptr);
             DestroyMenu(menu);if(result) Notify(result);PostMessageW(window,WM_NULL,0,0);
@@ -286,4 +293,8 @@ extern "C" __declspec(dllexport) double __stdcall CB_TaskbarHeight() {
     if(taskbar && GetWindowRect(taskbar,&rect))height=(rect.bottom-rect.top)*96./std::max(GetDpiForWindow(taskbar),1u);
     if(previous)SetThreadDpiAwarenessContext(previous);
     return height;
+}
+
+extern "C" __declspec(dllexport) void __stdcall CB_SetLanguage(int useChinese) {
+    chinese=useChinese!=0;if(host)PostMessageW(host,languageMessage,0,0);
 }

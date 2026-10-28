@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using ClariBar.Core;
 
+Localizer.Configure("zh-CN");
 string cache = Environment.GetEnvironmentVariable("CLARIBAR_ROOT") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClariBar");
 if(args.FirstOrDefault()=="--runtime")
 {
@@ -53,6 +54,30 @@ try
     var gpu=memory with {Name="GPU Core",HardwareType="GpuIntel",Kind="Clock"};
     Require(memory.DisplayName=="内存占用" && SensorLabels.Compact(memory)=="内存" && SensorLabels.Compact(gpu)=="GPU 频率","Chinese metric display labels");
     Require(memory.Name=="Memory" && memory.Id=="memory","Localization preserves raw hardware identities");
+
+    Require(Localizer.ResolveLanguage("System","zh-CN")=="zh-CN" && Localizer.ResolveLanguage("System","en-GB")=="en-US",
+        "System language selects supported Chinese or English");
+    Require(Localizer.ResolveLanguage("System","de-DE")=="en-US" && Localizer.ResolveLanguage("en-US","zh-CN")=="en-US" &&
+        Localizer.ResolveLanguage("zh-CN","en-US")=="zh-CN","Unsupported system languages fall back to English and manual selection overrides the system");
+    foreach(string language in new[]{"en-US","zh-CN","System"})
+    {
+        loaded.Language=language;loaded.SensorNames["custom"]="My fan 自定义";
+        store.Save(loaded);loaded=store.Load();
+        Require(loaded.Language==language && loaded.SensorNames["custom"]=="My fan 自定义","Language persists without translating custom sensor names");
+    }
+    Localizer.Configure("en-US");
+    Require(memory.DisplayName=="Memory usage" && SensorLabels.Compact(memory)=="Memory" && memory.StatusText=="Available",
+        "English labels cover metrics and statuses while retaining sensor IDs");
+    Require(Localizer.F("Version {0}","0.7.0")=="Version 0.7.0","English formatted messages");
+    Localizer.Configure("zh-CN");
+    Require(Localizer.F("Version {0}","0.7.0")=="版本 0.7.0" && Localizer.T("Available")=="可用","Chinese formatted messages and status labels");
+    Localizer.Configure("en-US");
+    Require(Localizer.T("版本 0.7.0")=="Version 0.7.0" && Localizer.T("基础监控已连接")=="Basic monitoring connected",
+        "Existing live status strings update after a language change");
+    Require(Localizer.MessageKeys.All(Localizer.HasTranslation),"Both supported languages have complete resource coverage");
+    Localizer.Configure("zh-CN");
+    results.Add(new{name="language-resolution-persistence-and-live-labels",passed=true});
+
     Require(SensorLabels.Name(memory with {Name="CPU Core #1 Thread #2",HardwareType="Cpu"})=="CPU 核心 1 线程 2占用","CPU core and thread labels are translated");
     loaded.SensorColors["unrelated"]="#123456";loaded.TimeColor="#123456";
     foreach(var scheme in ColorSchemes.Presets.Append(ColorSchemes.Random()))

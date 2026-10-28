@@ -1,3 +1,4 @@
+using L = ClariBar.Core.Localizer;
 using ClariBar.Core;
 using LibreHardwareMonitor.Hardware;
 
@@ -23,9 +24,9 @@ internal sealed class HardwareCollector : IDisposable
             if (!opened) { computer.Open(); opened = true; }
             foreach (var hardware in computer.Hardware) Visit(hardware, sensors, errors, elevated);
         }
-        catch (Exception ex) { errors.Add($"硬件访问：{ex.Message}"); }
+        catch (Exception ex) { errors.Add(L.F("Hardware access: {0}", ex.Message)); }
         try{sensors.AddRange(network.Read());}
-        catch(Exception ex){errors.Add($"出口网卡：{ex.Message}");}
+        catch(Exception ex){errors.Add(L.F("Network uplink: {0}", ex.Message));}
         return new SensorSnapshot(SensorSnapshot.ProtocolVersion, DateTimeOffset.UtcNow, elevated,
             errors.Count == 0 ? "ready" : "partial", sensors.ToArray(), errors.ToArray())
         {Network=network.Route,Capabilities=SensorCatalog.Capabilities(sensors)};

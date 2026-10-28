@@ -23,6 +23,8 @@ internal static partial class Native
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] internal delegate void TrayCallback(int action);
     [DllImport("ClariBar.Native.dll", CallingConvention = CallingConvention.StdCall)]
     internal static extern int CB_Start(TrayCallback callback);
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]
+    internal static extern void CB_SetLanguage(int chinese);
     [DllImport("ClariBar.Native.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
     internal static extern void CB_SetMonitor(string text, uint foreground, uint background, int opacity, int visible);
     [DllImport("ClariBar.Native.dll", CallingConvention = CallingConvention.StdCall)]

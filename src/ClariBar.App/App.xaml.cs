@@ -9,6 +9,7 @@ public partial class App : Application
     public App()
     {
         AppPaths.Initialize();
+        AppLocalization.Initialize();
         InitializeComponent();
         UnhandledException += (_, e) =>
         {

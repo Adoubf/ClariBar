@@ -1,0 +1,99 @@
+name: Bug report (English)
+description: Report an application, interface, taskbar or sensor problem.
+title: '[Bug] '
+body:
+- type: markdown
+  attributes:
+    value: Please provide enough detail to reproduce the problem. Required fields must be completed; screenshots
+      and logs are optional. Remove personal paths, account details and tokens before uploading.
+- type: input
+  id: app_version
+  attributes:
+    label: ClariBar version
+    description: Find this on the About page. Enter the version you actually used.
+    placeholder: 0.7.0
+  validations:
+    required: true
+- type: input
+  id: windows_version
+  attributes:
+    label: Windows version and OS build
+    description: Run winver and include the Windows release and OS build.
+    placeholder: Windows 11 24H2, OS build 26100.x
+  validations:
+    required: true
+- type: dropdown
+  id: area
+  attributes:
+    label: Affected feature
+    multiple: true
+    options:
+    - Taskbar transparency or background
+    - Embedded taskbar monitor
+    - Hardware and resource monitoring
+    - Network speed or adapter selection
+    - Text and icon colors
+    - Interface and interaction
+    - Language and translations
+    - Installation, upgrade or uninstall
+    - Other
+  validations:
+    required: true
+- type: textarea
+  id: steps
+  attributes:
+    label: Steps to reproduce
+    description: Describe the sequence from opening the app. For intermittent problems, include how often
+      it occurs.
+    placeholder: '1. Open ...
+
+      2. Select or change ...
+
+      3. Observe ...'
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: Expected behavior
+    placeholder: What should have happened?
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: Actual behavior
+    description: Describe what happened, including visible errors or connection states.
+  validations:
+    required: true
+- type: textarea
+  id: hardware
+  attributes:
+    label: Hardware information (optional)
+    description: For sensor problems, include CPU, GPU, motherboard and relevant disk models. Serial numbers
+      are not needed.
+- type: dropdown
+  id: authorization
+  attributes:
+    label: Hardware access state (optional)
+    options:
+    - Not authorized
+    - Authorized and connected
+    - Authorization cancelled or failed
+    - Connecting or disconnected
+    - Not applicable or unsure
+- type: input
+  id: displays
+  attributes:
+    label: Displays and scaling (optional)
+    placeholder: 'Example: 2 displays, 2560×1440 at 150%, 1920×1080 at 100%'
+- type: input
+  id: taskbar_tools
+  attributes:
+    label: Other taskbar customization tools (optional)
+    placeholder: Names and versions, or None
+- type: textarea
+  id: attachments
+  attributes:
+    label: Screenshots, logs and extra context (optional)
+    description: Drop screenshots here or paste relevant log excerpts after removing sensitive information.
