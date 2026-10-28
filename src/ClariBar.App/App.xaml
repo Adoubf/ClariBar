@@ -1,0 +1,28 @@
+<Application x:Class="ClariBar.App.App"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Application.Resources>
+  <ResourceDictionary>
+   <ResourceDictionary.MergedDictionaries>
+    <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+   </ResourceDictionary.MergedDictionaries>
+   <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light"><SolidColorBrush x:Key="ClariBarToolbarBrush" Color="#ECF6F9"/></ResourceDictionary>
+    <ResourceDictionary x:Key="Dark"><SolidColorBrush x:Key="ClariBarToolbarBrush" Color="#202020"/></ResourceDictionary>
+    <ResourceDictionary x:Key="HighContrast"><SolidColorBrush x:Key="ClariBarToolbarBrush" Color="{ThemeResource SystemColorWindowColor}"/></ResourceDictionary>
+   </ResourceDictionary.ThemeDictionaries>
+   <Style x:Key="SettingsCard" TargetType="Border">
+    <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+    <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="20,16" />
+   </Style>
+   <Style x:Key="SecondaryText" TargetType="TextBlock">
+    <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+   </Style>
+  </ResourceDictionary>
+ </Application.Resources>
+</Application>

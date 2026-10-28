@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ClariBar.App/ClariBar.App.csproj" />
+    <Project Path="src/ClariBar.Core/ClariBar.Core.csproj" />
+    <Project Path="src/ClariBar.SensorBroker/ClariBar.SensorBroker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ClariBar.Checks/ClariBar.Checks.csproj" />
+    <Project Path="tests/ClariBar.TaskbarProbe/ClariBar.TaskbarProbe.csproj" />
+  </Folder>
+</Solution>

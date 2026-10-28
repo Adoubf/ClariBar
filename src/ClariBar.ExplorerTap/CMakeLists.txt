@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.25)
+project(ClariBarExplorerTap LANGUAGES CXX)
+add_library(ClariBar.ExplorerTap SHARED tap.cpp exports.def)
+target_compile_features(ClariBar.ExplorerTap PRIVATE cxx_std_20)
+target_compile_options(ClariBar.ExplorerTap PRIVATE /utf-8 /W4 /permissive-)
+target_compile_definitions(ClariBar.ExplorerTap PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00)
+target_link_libraries(ClariBar.ExplorerTap PRIVATE user32 ole32 oleaut32 windowsapp dwrite)
+set_target_properties(ClariBar.ExplorerTap PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

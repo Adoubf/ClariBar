@@ -1,0 +1,4 @@
+LIBRARY ClariBar.ExplorerTap
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

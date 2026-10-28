@@ -66,3 +66,15 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# ClariBar local exclusions
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.dmp
+TestResults/
+
+# Keep the WinUI application source despite the executable *.app rule.
+!src/ClariBar.App/
