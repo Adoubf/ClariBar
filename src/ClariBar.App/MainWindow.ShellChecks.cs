@@ -51,9 +51,12 @@ public sealed partial class MainWindow
                         if(position.X< -2 || position.X+element.ActualWidth>PageContent.ActualWidth+2)
                             failures.Add($"{element.GetType().Name} {position.X:F1}+{element.ActualWidth:F1}/{PageContent.ActualWidth:F1}");
                     }
-                    bool search=SearchBox.ActualWidth>=100 && SearchBox.TransformToVisual(Root).TransformPoint(new()).X+SearchBox.ActualWidth<Root.ActualWidth-120;
+                    var searchAt=SearchBox.TransformToVisual(Root).TransformPoint(new());
+                    double searchCenterDelta=Math.Abs(searchAt.X+SearchBox.ActualWidth/2-Root.ActualWidth/2);
+                    double searchVerticalDelta=Math.Abs(searchAt.Y+SearchBox.ActualHeight/2-ShellTitleBar.ActualHeight/2);
+                    bool search=SearchBox.ActualWidth>=100 && searchAt.X+SearchBox.ActualWidth<Root.ActualWidth-120 && searchCenterDelta<=1.25 && searchVerticalDelta<=1.25;
                     bool passed=failures.Count==0 && search && PageSurface.ActualWidth>=300;
-                    checks.Add(new{width,page=(string)item.Tag,contentWidth=PageContent.ActualWidth,paneOpen=Nav.IsPaneOpen,search,failures,passed});
+                    checks.Add(new{width,page=(string)item.Tag,contentWidth=PageContent.ActualWidth,paneOpen=Nav.IsPaneOpen,search,searchCenterDelta,searchVerticalDelta,searchHostWidth=TitleSearchHost.ActualWidth,searchHostX=TitleSearchHost.TransformToVisual(Root).TransformPoint(new()).X,searchWidth=SearchBox.ActualWidth,searchMargin=SearchBox.Margin.Left,failures,passed});
                     if(!passed)throw new IOException("自适应布局检查失败："+JsonSerializer.Serialize(checks[^1]));
                     if((width==600 && (string)item.Tag is "sensors" or "colors" or "about") ||
                         (width==1220 && (string)item.Tag is "overview" or "about"))

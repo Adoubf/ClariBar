@@ -2,7 +2,8 @@
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
 $root=Split-Path $PSScriptRoot
-$version='0.7.0'
+$versionInfo=& "$PSScriptRoot\Get-ClariBarVersion.ps1"
+$version=$versionInfo.DisplayVersion
 $stage="$env:CLARIBAR_ROOT\build\package\$version\payload"
 $release="$env:CLARIBAR_ROOT\artifacts\ClariBar\releases"
 $inner="$env:CLARIBAR_ROOT\build\package\$version\installer"
@@ -54,7 +55,7 @@ $payload=@(Get-ChildItem $stage -Recurse -File | Where-Object Name -ne 'payload-
  [ordered]@{path=$_.FullName.Substring($stage.Length+1);bytes=$_.Length;sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash}
 })
 @{version=$version;architecture='win-x64';selfContained=$true;files=$payload} | ConvertTo-Json -Depth 5 | Set-Content "$stage\payload-manifest.json" -Encoding UTF8
-& $InnoCompiler /Qp "/DPayloadDir=$stage" "/DReleaseDir=$inner" "/DSourceRoot=$root" "$root\installer\ClariBar.iss"
+& $InnoCompiler /Qp "/DAppVersion=$version" "/DAppFileVersion=$($versionInfo.FileVersion)" "/DPayloadDir=$stage" "/DReleaseDir=$inner" "/DSourceRoot=$root" "$root\installer\ClariBar.iss"
 if($LASTEXITCODE -ne 0){throw 'Installer compilation failed.'}
 $bootstrap="$env:CLARIBAR_ROOT\build\installer-bootstrap"
 & cmake -S "$root\installer" -B $bootstrap -G Ninja -DCMAKE_BUILD_TYPE=Release "-DINNER_SETUP=$inner/ClariBar-Setup-$version-x64.exe"

@@ -7,7 +7,9 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-ClariBar is a Windows 11 taskbar customization and live resource monitoring tool. It combines a native settings-style interface with taskbar transparency, embedded monitoring, and configurable text and system icon colors.
+ClariBar is a Windows 11 taskbar customization and desktop utility. It combines a native settings-style interface with taskbar transparency, embedded resource monitoring, configurable text and system icon colors, a screen color picker, screenshots, pinned images, OCR, and screenshot translation.
+
+**Latest release:** [ClariBar 0.83 for Windows 11 x64](https://github.com/Adoubf/ClariBar/releases/tag/v0.83).
 
 ## Screenshots
 
@@ -21,6 +23,18 @@ Actual application pages. Click an image to view it at full size.
 | --- | --- |
 | ![Resource monitor](assets/screenshots/en-US/sensors.png) | ![Text and icon settings](assets/screenshots/en-US/colors.png) |
 
+| Desktop tools | Color editor |
+| --- | --- |
+| ![Desktop tools](assets/screenshots/en-US/tools.png) | ![Color editor](assets/screenshots/en-US/color-editor.png) |
+
+| Region capture & annotation | OCR |
+| --- | --- |
+| ![Region capture & annotation](assets/screenshots/en-US/capture-editor.png) | ![OCR](assets/screenshots/en-US/ocr.png) |
+
+| Screenshot translation · Bilingual | Screenshot translation · Overlay |
+| --- | --- |
+| ![Bilingual screenshot translation](assets/screenshots/en-US/translation-bilingual.png) | ![Translation over the captured region](assets/screenshots/en-US/translation-overlay.png) |
+
 ## Features
 
 - **Taskbar appearance:** follow Windows, use a transparent background, or apply a tint across multiple taskbars.
@@ -31,10 +45,16 @@ Actual application pages. Click an image to view it at full size.
 - **System icon colors:** customize time, date, tray glyphs, network, volume, input method and battery indicators.
 - **Live preview:** preview the taskbar from settings, with collapsible navigation, responsive layouts and transitions.
 - **Languages:** follow the Windows display language by default, or choose English or Simplified Chinese in General settings.
+- **Screen color picker:** pick from the live desktop with the normal mouse pointer, a following color swatch and an optional magnifier of the hovered region. Edit colors, copy HEX / RGB / HSL, explore lightness variations and revisit recent colors. The editor also applies colors to taskbar text and monitoring metrics.
+- **Screenshots:** adjust a region with eight handles, detect windows or UI elements, annotate beside the selection, and use delayed capture, custom dimensions, whiteboard, cursor capture, last-region reuse and successful-capture history. Save as PNG, JPEG, BMP or WebP, with a separate Quick Save folder workflow.
+- **Annotations:** rectangles, ellipses, lines, polylines, arrows, pencil, marker, mosaic, Gaussian blur, eraser and styled or rotated text, plus undo/redo and clearing. Arrows require a drag and preview the complete arrow before release; brush tools draw fresh strokes without object resize handles.
+- **Pinned images:** convert clipboard images, text, basic HTML, color values or copied files into floating images. Zoom, rotate, mirror, adjust opacity, use thumbnails or click-through, organize groups, recover closed windows and restore the session after restarting. Animated GIFs support playback and frame stepping.
+- **OCR and shared AI configuration:** use installed Windows OCR languages by default, or configure an OCR, VL or multimodal model through an HTTP/HTTPS service on your computer, LAN or a remote server. OCR and translation share the connection and key, with separate model IDs and a connection test.
+- **Screenshot translation:** press **Ctrl + Alt + A** to select a region and show a bilingual comparison or translated text over the captured area. Chinese translates into English and English into Chinese automatically. Free online translation is the default; offline models download only after explicit opt-in. AI also supports manually chosen target languages.
 
 ## Download and install
 
-1. Open [Releases](https://github.com/Adoubf/ClariBar/releases) and download `ClariBar-Setup-*-x64.exe`.
+1. Download [ClariBar-Setup-0.83-x64.exe](https://github.com/Adoubf/ClariBar/releases/download/v0.83/ClariBar-Setup-0.83-x64.exe) from [Releases](https://github.com/Adoubf/ClariBar/releases/tag/v0.83).
 2. Run the installer and choose where to store the application and runtime data.
 3. Start ClariBar and configure Taskbar and Resource monitor.
 
@@ -44,6 +64,8 @@ Some CPU and motherboard temperatures and fan readings require hardware authoriz
 
 Current builds are unsigned installation previews. Each Release includes a SHA-256 checksum file; use PowerShell `Get-FileHash` to verify a download.
 
+Version **0.83** fixes the Close button staying red after restoring settings from the tray and a deferred title-bar update during shutdown. It also includes automatic Chinese/English translation, HY-MT compatibility, more time for the first hardware scan and wrapping for offline model settings in narrow windows. Existing settings, custom shortcuts, credentials and history are preserved on upgrade.
+
 ## Quick start
 
 1. Choose a background style in **Taskbar** and enable embedded monitoring.
@@ -52,7 +74,96 @@ Current builds are unsigned installation previews. Each Release includes a SHA-2
 4. Select a language in **General**, or leave it set to **Follow system**.
 5. Closing settings keeps the app in the system tray by default. Use **Restore all** or quit from the tray menu to restore the taskbar.
 
-Shortcuts: `F1` for help, `Ctrl+B` to collapse navigation, and `Ctrl+F` to find sensors.
+Use **Help** in the toolbar for the shortcut reference, `Ctrl+B` to collapse navigation, and `Ctrl+F` to find sensors.
+
+Desktop tools are available from settings and the tray menu. Their global shortcuts can be changed or disabled on **Desktop tools**:
+
+| Default shortcut | Action |
+| --- | --- |
+| `F1` | Capture a window or region |
+| `Ctrl+Alt+C` | Pick a screen color |
+| `F3` | Pin an image from the clipboard |
+| `Ctrl+Alt+O` | Select a region and extract text |
+| `Ctrl+Alt+A` | Select a region and translate text |
+| `Shift+F3` | Show or hide pinned images |
+| Not assigned | Toggle mouse click-through (optional) |
+| Not assigned | Delayed capture (optional) |
+
+The capture and paste shortcuts follow Snipaste. Close Snipaste or disable its global hotkeys before switching to ClariBar with the same keys. Windows error 1409 means a shortcut is already in use; settings explain the conflict and offer **Retry shortcuts**. Leave an individual shortcut blank to disable it, or use **Use Snipaste shortcuts** to reapply the preset. Existing custom shortcuts are preserved during migration.
+
+During capture, releasing the mouse keeps the selection open for adjustment and annotation:
+
+| Action | Controls |
+| --- | --- |
+| Window / UI element detection | `Tab` before selecting |
+| Move / enlarge / shrink the selection | Arrow keys / `Ctrl+arrows` / `Shift+arrows` |
+| Move the cursor precisely | `W`, `A`, `S`, `D` |
+| Move a region while dragging | Hold `Space` |
+| Magnifier / change color format / copy color | `Alt` / `Shift` / `C` |
+| Copy and finish / pin | `Enter` or double-click / `Ctrl+T` or middle-click |
+| Save As / Quick Save | `Ctrl+S` / `Ctrl+Shift+S` |
+| Last region / capture history | `R` / `,` and `.` |
+| Show or hide annotation tools | `Space` |
+| Undo / redo / clear annotations | `Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+Z` |
+| Finish the current shape / reset selection | Right-click |
+
+On a pinned image, drag to move, wheel to zoom, `Ctrl+wheel` to change opacity, and hold `Shift` while dragging to snap to another window. Use `1` / `2` to rotate, `3` / `4` to mirror, middle-click to reset size and opacity, `Shift+double-click` for a thumbnail, and `Space` to annotate in place. For a GIF, `1` / `2` step frames and `Shift+wheel` changes playback speed. Right-click opens image actions, including printing through the Windows print dialog.
+
+`Esc` or double-click closes a pin recoverably; paste again to recover it when the clipboard has not changed. `Shift+Esc` destroys it. Hiding all pins preserves their open state. Pin images and groups are restored at startup by default; capture and pin preferences are available on Desktop tools. Clipboard HTML uses a local renderer for common text styles, without loading web content.
+
+When annotating a pinned image, its toolbar floats directly below the picture in a separate window. If there is insufficient room below, the toolbar moves above it. The picture and toolbar have no extra system frame; custom color and style panels can open beyond the compact toolbar. The Pin button indicates a pinned image, while Copy is an ordinary action. Closing the toolbar returns to the pinned image at its original size and position.
+
+By default, completing a screen pick opens only the color editor. Picking again from that editor returns to the same window. Picking a color for a taskbar or monitoring setting returns to the settings page that requested it.
+
+The color editor follows the PowerToys layout: horizontal color history, a vertical shade strip, compact HEX/RGB/HSL/HSV cards and an on-demand HSV/RGB/HEX editor. Copy values with the card buttons, right-click history colors to remove or export them, and use the gear button to choose activation behavior, mouse actions, the default copy format, or add and arrange custom color formats. Picking keeps the desktop live and preserves the mouse pointer; the color card follows it, and the wheel opens or adjusts a live magnifier of the hovered region. By default, left-click copies and opens the editor, middle-click copies and closes, and right-click cancels. The optional `Win+Shift+C` binding is supported.
+
+Choose **Default recognition method** under **Desktop tools → Screenshots & OCR** to use local recognition or AI automatically when opening OCR from a screenshot, pinned image or shortcut. Choosing AI authorizes sending the selected image to the configured service. A new installation defaults to local recognition.
+
+Local OCR uses Windows language components and does not download a separate model. If no OCR language is installed, add one in Windows language settings. Images and text are saved to the folder selected in Desktop tools.
+
+Optional AI OCR supports local, LAN and remote **HTTP or HTTPS** services. Select automatic endpoint detection or one of these API formats:
+
+| Endpoint type | Standard API suffix |
+| --- | --- |
+| OpenAI Chat Completions | `/v1/chat/completions` |
+| OpenAI Responses | `/v1/responses` |
+| Anthropic Messages | `/v1/messages` |
+| Gemini GenerateContent | `/v1beta/models/{model}:generateContent` |
+
+Enter a server root, `/v1`, `/v1beta` or a complete API endpoint; settings preview the resolved request address. Local and private network services connect directly. HTTPS uses normal certificate validation, including for an internal service.
+
+Model IDs are freely editable. OCR models such as **PaddleOCR-VL** and **DeepSeek-OCR**, **VL models** and **general multimodal models** can connect through these APIs. Automatic model selection supplies the documented OCR prompts for PaddleOCR-VL and DeepSeek-OCR; a custom prompt and request timeout are also available. The server must support image input using the selected API format.
+
+**Test connection** sends a built-in sample image using the current fields and displays the API/model, elapsed time and recognized text. It distinguishes successful image recognition from a connected service that returns unexpected text, and reports authentication, endpoint, network, certificate and timeout errors. Testing does not save changes; use **Save AI settings** when ready. API keys are encrypted for the current Windows account and are excluded from diagnostics.
+
+### Screenshot translation
+
+Press **Ctrl + Alt + A**, then click a window or drag a region. Choose the default engine and display mode under **Desktop tools → Screenshot translation**. The bilingual window shows source and translated text side by side and stacks them in a narrow window. The overlay covers the original captured region, with a nearby toolbar for viewing the original, copying the translation, closing, or returning to bilingual comparison. Switching views reuses the current result. The target defaults to **Automatic (Chinese ↔ English)**: Chinese screenshots translate into English, and English screenshots into Chinese. Each capture determines the direction again. You can choose a fixed target or enter another language for AI.
+
+- **Free online (default):** MyMemory, no key or model download. Only recognized text is sent. Its current anonymous limit is [5,000 characters per day](https://mymemory.translated.net/doc/usagelimits.php); network and quota failures remain visible.
+- **Optional offline:** Chinese ↔ English on the CPU. Enable the explicit download checkbox to install approximately 190 MB of models and an isolated runtime in the application's data/cache directories. Nothing downloads automatically. You can cancel and retry; downloaded archives are checked against pinned SHA-256 hashes.
+- **AI:** add **Translation model ID** under **AI configuration**. OCR and translation share the existing server, protocol, key and timeout. Translation sends recognized text, so a regular text model is sufficient; a vision model is optional. Type a target language code or name to use languages supported by your model. Use **Test model → AI translation → Test connection** to test built-in text.
+
+Translation first uses installed Windows OCR languages. Automatic recognition uses the installed English recognizer for English text when available. It reports missing language components or unavailable engines instead of silently switching providers.
+
+AI translation joins wrapped screenshot lines into paragraphs before translating. **Tencent HY-MT / Hunyuan-MT** models use their [official translation prompt](https://huggingface.co/tencent/Hy-MT2-7B) with one plain-text result per paragraph. General models use structured replies, with a paragraph retry if their output merges blocks. Both approaches preserve the source positions for overlay display. Recognized source text remains visible if translation fails.
+
+Basic command-line actions can also be sent to a running instance:
+
+```powershell
+ClariBar.exe --capture
+ClariBar.exe --pick-color
+ClariBar.exe --pin
+ClariBar.exe --ocr
+ClariBar.exe --translate
+ClariBar.exe --hide-pins
+ClariBar.exe --delayed-capture
+ClariBar.exe --quit
+```
+
+## Versioning
+
+Feature updates change the first decimal place (`0.7` → `0.8`). Refinements and fixes change the second (`0.71` → `0.72`). The current preview is **0.83**. `Version.props` supplies the version for the app, build scripts and installer.
 
 ## Build from source
 

@@ -54,17 +54,21 @@ internal sealed class BrokerClient : IAsyncDisposable
             StateChanged?.Invoke(new(BrokerPhase.Reading,L.T("Connected. Reading hardware data…")));
             using var reader = new StreamReader(pipe, new UTF8Encoding(false), false, 65536, true);
             await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), 65536, true) { AutoFlush = true };
+            // The first sample opens hardware drivers and enumerates devices.
+            // Cold initialization can exceed the timeout for regular updates.
+            bool firstSample=true;
             while (!stopping.IsCancellationRequested)
             {
                 await writer.WriteLineAsync(JsonSerializer.Serialize(new BrokerRequest("sample", token), Wire.Json));
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
-                timeout.CancelAfter(TimeSpan.FromSeconds(15));
+                timeout.CancelAfter(TimeSpan.FromSeconds(firstSample?60:15));
                 var line = await reader.ReadLineAsync(timeout.Token);
                 if (line is null) throw new IOException(L.T("The sensor process disconnected."));
                 if (line.Length > Wire.MaximumLineLength) throw new IOException(L.T("Sensor response exceeds the size limit."));
                 var snapshot = JsonSerializer.Deserialize<SensorSnapshot>(line, Wire.Json)
                     ?? throw new IOException(L.T("Empty sensor response."));
                 if (snapshot.Version != SensorSnapshot.ProtocolVersion) throw new IOException(L.T("Sensor protocol version mismatch."));
+                firstSample=false;
                 Sample?.Invoke(snapshot);
                 await Task.Delay(Math.Clamp(IntervalMs, 500, 5000), stopping.Token);
             }

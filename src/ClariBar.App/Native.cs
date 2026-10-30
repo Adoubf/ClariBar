@@ -25,6 +25,18 @@ internal static partial class Native
     internal static extern int CB_Start(TrayCallback callback);
     [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]
     internal static extern void CB_SetLanguage(int chinese);
+    [DllImport("ClariBar.Native.dll", CallingConvention = CallingConvention.StdCall)]
+    internal static extern int CB_SetToolHotkey(int slot, uint modifiers, uint key);
+    [DllImport("user32.dll")] internal static extern nint SendMessage(nint window, uint message, nint wparam, nint lparam);
+    internal static void ClearCaptionHover(nint window)
+    {
+        // WinUI can stop non-client leave tracking while X is still hovered.
+        // A move to HTNOWHERE updates InputNonClientPointerSource even then.
+        // Reset while hidden so the first restored frame is already neutral.
+        if(!DesktopCapture.GetCursorPos(out var cursor))return;
+        nint point=unchecked((nint)(int)((uint)(ushort)cursor.X | (uint)(ushort)cursor.Y<<16));
+        SendMessage(window,0x00A0,0,point); // WM_NCMOUSEMOVE, HTNOWHERE
+    }
     [DllImport("ClariBar.Native.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
     internal static extern void CB_SetMonitor(string text, uint foreground, uint background, int opacity, int visible);
     [DllImport("ClariBar.Native.dll", CallingConvention = CallingConvention.StdCall)]

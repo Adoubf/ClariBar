@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <ClariBarFeatureVersion>8</ClariBarFeatureVersion>
+    <ClariBarRefinementVersion>3</ClariBarRefinementVersion>
+    <ClariBarDisplayVersion>0.$(ClariBarFeatureVersion)$(ClariBarRefinementVersion)</ClariBarDisplayVersion>
+    <ClariBarDisplayVersion Condition="'$(ClariBarRefinementVersion)' == '0'">0.$(ClariBarFeatureVersion)</ClariBarDisplayVersion>
+    <Version>0.$(ClariBarFeatureVersion).$(ClariBarRefinementVersion)</Version>
+    <FileVersion>$(Version).0</FileVersion>
+    <AssemblyVersion>$(FileVersion)</AssemblyVersion>
+    <InformationalVersion>$(ClariBarDisplayVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

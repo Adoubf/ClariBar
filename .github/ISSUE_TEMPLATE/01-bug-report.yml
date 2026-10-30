@@ -33,6 +33,10 @@ body:
     - Hardware and resource monitoring
     - Network speed or adapter selection
     - Text and icon colors
+    - Screen color picker
+    - Screenshot, annotation or pinned image
+    - OCR or optional AI recognition
+    - Screenshot translation
     - Interface and interaction
     - Language and translations
     - Installation, upgrade or uninstall

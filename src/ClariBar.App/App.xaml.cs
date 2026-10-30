@@ -24,6 +24,7 @@ public partial class App : Application
     }
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        int desktopCommand=ClariBar.Core.DesktopCommand.FromArguments(Environment.GetCommandLineArgs());
         if(Environment.GetCommandLineArgs().Contains("--quit"))
         {
             var previous=Native.FindWindow("ClariBar.Host",null);
@@ -36,12 +37,13 @@ public partial class App : Application
             if (!created)
             {
                 var previous = Native.FindWindow("ClariBar.Host", null);
-                if (previous != 0) Native.PostMessage(previous, Native.RegisterWindowMessage("ClariBar.ShowSettings"), 0, 0);
+                if (previous != 0) Native.PostMessage(previous, Native.RegisterWindowMessage(desktopCommand==0?"ClariBar.ShowSettings":"ClariBar.DesktopCommand"), desktopCommand, 0);
                 Exit(); return;
             }
         }
         main = new MainWindow();
         main.Activate();
+        if(desktopCommand!=0)_=main.ExecuteDesktopCommandAsync(desktopCommand);
     }
 }
 

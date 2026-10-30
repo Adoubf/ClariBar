@@ -63,7 +63,7 @@ public sealed partial class MainWindow
     }
     private async Task CheckProjectAboutAsync()
     {
-        Nav.SelectedItem=Nav.MenuItems[5];await Task.Delay(350);
+        NavigateTo("about");await Task.Delay(350);
         var texts=new List<string>();
         void Read(DependencyObject node)
         {

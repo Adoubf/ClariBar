@@ -34,6 +34,64 @@ var results = new List<object>();
 Directory.CreateDirectory(root);
 try
 {
+    AiOcrProtocolChecks.Run(Require);
+    TranslationChecks.Run(Require);
+    results.Add(new{name="ai-ocr-protocols-and-lan-configuration",passed=true});
+    Require(new PixelRect(-1920, -200, 2560, 1440).Contains(-1, 0), "Negative virtual-desktop coordinates are valid");
+    Require(!new PixelRect(0, 0, 100, 100).Contains(100, 50), "Capture rectangles exclude the far edge");
+    Require(new PixelRect(-20, -10, 50, 40).Intersect(new(0, 0, 40, 40)) == new PixelRect(0, 0, 30, 30), "Crop clips against image bounds");
+    Require(new PixelRect(-30, 0, 10, 10).Intersect(new(0, 0, 10, 10)).IsEmpty, "Disjoint capture rectangles are empty");
+    Require(PixelRect.Between(80, 70, 20, 10) == new PixelRect(20, 10, 60, 60), "Dragging in any direction produces the same region");
+    foreach (byte r in new byte[] { 0, 1, 64, 127, 128, 192, 254, 255 })
+    foreach (byte g in new byte[] { 0, 1, 64, 127, 128, 192, 254, 255 })
+    foreach (byte b in new byte[] { 0, 1, 64, 127, 128, 192, 254, 255 })
+    {
+        var c = new ScreenColor(r, g, b); var (h, s, l) = c.HslValues;
+        if (ScreenColor.FromHsl(h, s, l) != c) throw new IOException("HSL color round-trip failed for " + c.Hex);
+    }
+    Require(ScreenColor.TryParse(" #50bed2 ", out var picked) && picked.Hex == "#50BED2" && picked.Rgb == "rgb(80, 190, 210)", "HEX input and RGB formatting");
+    Require(!ScreenColor.TryParse("#GGGGGG", out _) && !ScreenColor.TryParse("#FF00", out _), "Invalid HEX input is rejected");
+    foreach(byte r in new byte[]{0,1,64,127,128,192,254,255})
+    foreach(byte g in new byte[]{0,1,64,127,128,192,254,255})
+    foreach(byte b in new byte[]{0,1,64,127,128,192,254,255})
+    {var original=new ScreenColor(r,g,b);var hsv=ColorFormats.Hsv(original);Require(ColorFormats.FromHsv(hsv.H,hsv.S,hsv.V)==original,"HSV precision survives an RGB round trip");}
+    var colorSample=new ScreenColor(80,190,210);var colorPreferences=new AppSettings();
+    Require(ColorFormats.Format(colorSample,"#%ReX%GrX%BlX")==colorSample.Hex && ColorFormats.Format(colorSample,"rgb(%Re, %Gr, %Bl)")==colorSample.Rgb && ColorFormats.Format(colorSample,"hsl(%Hu, %Sl%, %Ll%)")==colorSample.Hsl,"Color format rows agree with the sampled RGB bytes and existing HSL conversion");
+    Require(ColorFormats.Format(new(0,0,0),"cmyk(%Cy%, %Ma%, %Ye%, %Bk%)")=="cmyk(0%, 0%, 0%, 100%)" && ColorFormats.Format(new(255,255,255),"%Al / %Dv")=="255 / 16777215","CMYK black and opaque alpha/decimal formats have defined boundary behavior");
+    Require(ColorFormats.ValidTemplate("new Color(%Re, %Gr, %Bl)") && !ColorFormats.ValidTemplate("%Unsupported") && !ColorFormats.ValidTemplate(""),"Custom formats accept supported tokens and reject unknown placeholders");
+    colorPreferences.ColorFormats=[new(){Name="CSS",Format="rgb(%Re, %Gr, %Bl)"},new(){Name="HEX",Format="#%ReX%GrX%BlX",Enabled=false}];colorPreferences.ColorCopyFormat="CSS";colorPreferences.Normalize();
+    Require(ColorFormats.DefaultText(colorSample,colorPreferences)==colorSample.Rgb && colorPreferences.ColorFormats[0].Name=="CSS" && !colorPreferences.ColorFormats[1].Enabled,"Custom format ordering, enabled state and default copy format survive normalization");
+    using(var byColor=JsonDocument.Parse(ColorFormats.Export(["#50BED2","#FFFFFF"],colorPreferences.ColorFormats,false)))
+    using(var byFormat=JsonDocument.Parse(ColorFormats.Export(["#50BED2","#FFFFFF"],colorPreferences.ColorFormats,true)))
+        Require(byColor.RootElement[0].GetProperty("formats").GetProperty("CSS").GetString()==colorSample.Rgb && byFormat.RootElement.GetProperty("CSS").GetArrayLength()==2,"History exports group actual color values by color or by format");
+    Require(ToolHotkey.TryParse("Win+Shift+C",out var powerToysKey) && powerToysKey==new ToolHotkey(12,67),"The PowerToys activation shortcut can be assigned using the Windows modifier");
+    results.Add(new{name="color-editor-hsv-custom-formats-and-export",passed=true});
+    var history = Enumerable.Range(0, 30).Select(i => $"#{i:X6}").Concat(new[] { "broken", "#000000" });
+    var remembered = ScreenColor.Remember(history, "#50BED2");
+    Require(remembered.Length == 24 && remembered[0] == "#50BED2" && remembered.Distinct().Count() == remembered.Length, "Color history is bounded, valid and deduplicated");
+    Require(ToolHotkey.TryParse("Ctrl+Alt+A", out var key) && key == new ToolHotkey(3, 65) && ToolHotkey.TryParse("Shift+F10", out _), "Global hotkeys parse modifiers and function keys");
+    Require(ToolHotkey.TryParse("F1",out _) && ToolHotkey.TryParse("f24",out _) && !ToolHotkey.TryParse("F25",out _),"Standalone function-key shortcuts have valid boundaries");
+    var shortcutSettings=new AppSettings {CaptureHotkey="Ctrl+Alt+A",PinHotkey="Ctrl+Alt+V",HidePinsHotkey="Ctrl+Alt+H",ClickThroughHotkey="Ctrl+Alt+X",DelayedCaptureHotkey="Ctrl+Alt+D",MonitorFontFamily="Consolas",MonitorFontSize=14,MonitorColor="#123456"};
+    Require(DesktopShortcuts.Migrate(shortcutSettings) && shortcutSettings.CaptureHotkey=="F1" && shortcutSettings.PinHotkey=="F3" && shortcutSettings.HidePinsHotkey=="Shift+F3" && shortcutSettings.ClickThroughHotkey=="" && shortcutSettings.DelayedCaptureHotkey=="","Legacy shortcut defaults migrate to the Snipaste bindings without inventing optional shortcuts");
+    Require(shortcutSettings.MonitorFontFamily=="Consolas" && shortcutSettings.MonitorFontSize==14 && shortcutSettings.MonitorColor=="#123456","Shortcut migration preserves monitoring appearance");
+    shortcutSettings.CaptureHotkey="Ctrl+Alt+A";Require(!DesktopShortcuts.Migrate(shortcutSettings) && shortcutSettings.CaptureHotkey=="Ctrl+Alt+A","One-time migration preserves later custom changes including a legacy key");
+    var customShortcuts=new AppSettings {CaptureHotkey="Shift+F8",PinHotkey="Ctrl+F10",HidePinsHotkey="",DelayedCaptureHotkey="Shift+F9"};
+    Require(DesktopShortcuts.Migrate(customShortcuts) && customShortcuts.CaptureHotkey=="Shift+F8" && customShortcuts.PinHotkey=="Ctrl+F10" && customShortcuts.HidePinsHotkey=="" && customShortcuts.DelayedCaptureHotkey=="Shift+F9","Custom and individually disabled shortcuts survive migration");
+    DesktopShortcuts.ApplySnipaste(shortcutSettings);
+    var shortcutStore=new SettingsStore(Path.Combine(root,"shortcuts"));shortcutStore.Save(shortcutSettings);shortcutSettings=shortcutStore.Load();
+    Require(shortcutSettings.ToolShortcutVersion==1 && shortcutSettings.DelayedCaptureHotkey=="" && shortcutSettings.ClickThroughHotkey=="","Disabled shortcuts persist as blank instead of reverting to conflicting defaults");
+    var hotkeyCalls=new List<(int Slot,uint Modifiers,uint Key)>();
+    var keyErrors=DesktopShortcuts.Register(shortcutSettings,(slot,mods,value)=>{hotkeyCalls.Add((slot,mods,value));return value==0x70?1409:0;});
+    Require(hotkeyCalls.Take(8).Select(call=>call.Slot).SequenceEqual(Enumerable.Range(0,8)) && hotkeyCalls.Take(8).All(call=>call.Key==0) && hotkeyCalls.Count==14,"All eight slots are released before binding six assigned shortcuts");
+    Require(keyErrors is [{Action:"Screenshot",Error:1409,DuplicateAction:null}] && keyErrors[0].Message.Contains("已被占用") && shortcutSettings.CaptureHotkey=="F1","Windows 1409 explains shortcut ownership without silently changing the chosen key");
+    Require(DesktopShortcuts.Register(shortcutSettings,(_,_,_)=>0).Length==0,"Retrying after the competing application releases its keys clears the conflict");
+    shortcutSettings.PinHotkey="f1";hotkeyCalls.Clear();keyErrors=DesktopShortcuts.Register(shortcutSettings,(slot,mods,value)=>{hotkeyCalls.Add((slot,mods,value));return 0;});
+    Require(keyErrors is [{Action:"Pin clipboard image",DuplicateAction:"Screenshot"}] && hotkeyCalls.Count(call=>call.Key==0x70)==1,"Equivalent duplicate shortcuts are diagnosed inside ClariBar and are only registered once");
+    shortcutSettings.ToolHotkeysEnabled=false;hotkeyCalls.Clear();keyErrors=DesktopShortcuts.Register(shortcutSettings,(slot,mods,value)=>{hotkeyCalls.Add((slot,mods,value));return 0;});
+    Require(keyErrors.Length==0 && hotkeyCalls.Count==8 && hotkeyCalls.All(call=>call.Key==0),"Disabling global shortcuts releases every slot without reporting false conflicts");
+    results.Add(new{name="snipaste-shortcuts-migration-conflicts-and-retry",passed=true});
+    Require(DesktopCommand.FromArguments(["ClariBar.exe","--capture"])==10 && DesktopCommand.FromArguments(["--pin"])==12 && DesktopCommand.FromArguments(["--ocr"])==13 && DesktopCommand.FromArguments(["--page=tools"])==0,"Basic desktop CLI commands map to validated desktop actions");
+    Require(!ToolHotkey.TryParse("A", out _) && !ToolHotkey.TryParse("Ctrl+Escape", out _) && !ToolHotkey.TryParse("Ctrl+A+B", out _), "Invalid or ambiguous shortcuts are rejected");
     var store = new SettingsStore(root);
     var settings = new AppSettings { IntervalMs = 1, MonitorOpacity = 200, MonitorColor = "broken",
         PinnedSensors = ["one", "one", "two"] };

@@ -11,9 +11,13 @@
 #include <cmath>
 #include "explorer_bridge.h"
 #include "text_ink.h"
+LRESULT ClariPickerDispatch(HWND,UINT,LPARAM,bool&);
+void ClariPickerShutdown();
 
 namespace {
 constexpr UINT trayMessage = WM_APP + 1, updateMessage = WM_APP + 2, languageMessage = WM_APP + 3;
+constexpr UINT toolHotkeyMessage = WM_APP + 20;
+struct ToolHotkeyUpdate { int slot; UINT modifiers, key; };
 constexpr UINT iconId = 1;
 using Callback = void(__stdcall*)(int);
 std::thread worker;
@@ -23,6 +27,7 @@ Callback callback{};
 UINT taskbarCreated{};
 UINT showRequested{};
 UINT quitRequested{};
+UINT desktopCommandRequested{};
 HICON icon{};
 HFONT font{};
 int fontPixels{};
@@ -182,6 +187,16 @@ void PositionMonitor() {
 }
 
 LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) {
+    bool pickerHandled{};auto pickerResult=ClariPickerDispatch(window,message,lparam,pickerHandled);if(pickerHandled)return pickerResult;
+    if(message==toolHotkeyMessage) {
+        const auto* data=reinterpret_cast<const ToolHotkeyUpdate*>(lparam);
+        if(data->slot<0 || data->slot>7)return ERROR_INVALID_PARAMETER;
+        const int id=10+data->slot;UnregisterHotKey(window,id);
+        if(!data->key)return 0;
+        if(RegisterHotKey(window,id,data->modifiers|MOD_NOREPEAT,data->key))return 0;
+        return GetLastError();
+    }
+    if(message==WM_HOTKEY && wparam>=10 && wparam<=17) {Notify(wparam==17?22:static_cast<int>(wparam));return 0;}
     if(message==languageMessage) {
         NOTIFYICONDATAW data{sizeof(data)};data.hWnd=host;data.uID=iconId;data.uFlags=NIF_TIP;
         wcscpy_s(data.szTip,Tr(L"ClariBar · Double-click to open settings",L"澄栏 ClariBar · 双击打开设置"));
@@ -189,6 +204,7 @@ LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) 
     }
     if(message==showRequested) {Notify(1);return 0;}
     if(message==quitRequested) {Notify(2);return 0;}
+    if(message==desktopCommandRequested) {if(wparam>=10 && wparam<=22)Notify(static_cast<int>(wparam));return 0;}
     if(message==WM_TIMER){ClariBridgeHeartbeat();return 0;}
     if(message==taskbarCreated) {AddTray();if(transparencyMode) ApplyTaskbars();return 0;}
     if(message==trayMessage) {
@@ -197,6 +213,21 @@ LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) 
         if(event==WM_CONTEXTMENU || event==WM_RBUTTONUP) {
             POINT point{};GetCursorPos(&point);HMENU menu=CreatePopupMenu();
             AppendMenuW(menu,MF_STRING,1,Tr(L"Open ClariBar settings",L"打开澄栏设置"));
+            AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
+            AppendMenuW(menu,MF_STRING,10,Tr(L"Screenshot",L"截图"));
+            AppendMenuW(menu,MF_STRING,11,Tr(L"Pick a screen color",L"屏幕取色"));
+            AppendMenuW(menu,MF_STRING,12,Tr(L"Pin clipboard image",L"贴图（剪贴板）"));
+            AppendMenuW(menu,MF_STRING,13,Tr(L"Extract text (OCR)",L"提取文字（OCR）"));
+            AppendMenuW(menu,MF_STRING,22,Tr(L"Screenshot translation",L"截图翻译"));
+            AppendMenuW(menu,MF_STRING,14,Tr(L"Show / hide all images",L"显示 / 隐藏所有贴图"));
+            AppendMenuW(menu,MF_STRING,15,Tr(L"Toggle image click-through",L"切换贴图鼠标穿透"));
+            AppendMenuW(menu,MF_STRING,16,Tr(L"Delayed capture",L"延时截图"));
+            AppendMenuW(menu,MF_STRING,17,Tr(L"Capture current screen",L"截取当前屏幕"));
+            AppendMenuW(menu,MF_STRING,18,Tr(L"Capture entire desktop",L"截取整个桌面"));
+            AppendMenuW(menu,MF_STRING,19,Tr(L"Repeat last region",L"重复上次选区"));
+            AppendMenuW(menu,MF_STRING,20,Tr(L"Whiteboard",L"白板"));
+            AppendMenuW(menu,MF_STRING,21,Tr(L"Pinned images and groups",L"贴图与分组"));
+            AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
             AppendMenuW(menu,MF_STRING,3,shown?Tr(L"Hide floating monitor",L"隐藏监控窗"):Tr(L"Show floating monitor",L"显示监控窗"));
             AppendMenuW(menu,MF_STRING,4,ClariLocalConfig().embedded?Tr(L"Hide taskbar monitor",L"隐藏任务栏监控"):Tr(L"Show taskbar monitor",L"显示任务栏监控"));
             AppendMenuW(menu,MF_SEPARATOR,0,nullptr);AppendMenuW(menu,MF_STRING,2,Tr(L"Quit ClariBar",L"退出澄栏"));
@@ -228,11 +259,21 @@ LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) 
     }
     if(message==WM_CLOSE) {DestroyWindow(window);return 0;}
     if(message==WM_DESTROY) {
+        ClariPickerShutdown();
+        for(int id=10;id<=17;id++)UnregisterHotKey(window,id);
         RestoreTaskbars();NOTIFYICONDATAW data{sizeof(data)};data.hWnd=window;data.uID=iconId;Shell_NotifyIconW(NIM_DELETE,&data);
         if(monitor) DestroyWindow(monitor);monitor=nullptr;PostQuitMessage(0);return 0;
     }
     return DefWindowProcW(window,message,wparam,lparam);
 }
+}
+
+HWND ClariHostWindow(){return host;}
+
+extern "C" __declspec(dllexport) int __stdcall CB_SetToolHotkey(int slot,unsigned modifiers,unsigned key) {
+    if(!host)return ERROR_INVALID_WINDOW_HANDLE;
+    ToolHotkeyUpdate data{slot,modifiers,key};
+    return static_cast<int>(SendMessageW(host,toolHotkeyMessage,0,reinterpret_cast<LPARAM>(&data)));
 }
 
 extern "C" __declspec(dllexport) int __stdcall CB_Start(Callback handler) {
@@ -248,6 +289,7 @@ extern "C" __declspec(dllexport) int __stdcall CB_Start(Callback handler) {
         taskbarCreated=RegisterWindowMessageW(L"TaskbarCreated");
         showRequested=RegisterWindowMessageW(L"ClariBar.ShowSettings");
         quitRequested=RegisterWindowMessageW(L"ClariBar.Exit");
+        desktopCommandRequested=RegisterWindowMessageW(L"ClariBar.DesktopCommand");
         host=CreateWindowExW(WS_EX_TOOLWINDOW,L"ClariBar.Host",L"ClariBar",WS_POPUP,0,0,0,0,nullptr,nullptr,instance,nullptr);
         monitor=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED|WS_EX_TOPMOST|WS_EX_TRANSPARENT,L"ClariBar.Monitor",L"澄栏实时监控",WS_POPUP,0,0,680,42,nullptr,nullptr,instance,nullptr);
         int dpi=monitor?static_cast<int>(GetDpiForWindow(monitor)):96;

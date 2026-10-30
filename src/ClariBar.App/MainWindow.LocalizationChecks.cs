@@ -39,7 +39,7 @@ public sealed partial class MainWindow
             foreach(string locale in new[]{"en-US","zh-CN"})
             {
                 ChangeLanguage(locale);await Task.Delay(300);
-                Nav.SelectedItem=Nav.MenuItems[4];await Task.Delay(250);
+                NavigateTo("general");await Task.Delay(250);
                 int expectedIndex=locale=="en-US"?1:2;
                 if(Root.Language!=locale || store.Load().Language!=locale || languageSelector?.SelectedIndex!=expectedIndex)
                     throw new IOException("The language selector, active UI and saved preference disagree.");
@@ -52,8 +52,8 @@ public sealed partial class MainWindow
                     Nav.SelectedItem=Nav.MenuItems[i];await Task.Delay(220);
                     CheckShortcutTooltips();
                     if(i==2)CheckSensorControls();
-                    string expected=locale=="en-US"?new[]{"Overview","Taskbar","Resource monitor","Text & icons","General","About"}[i]:
-                        new[]{"概览","任务栏外观","资源监控","文字与图标","通用设置","关于"}[i];
+                    string expected=locale=="en-US"?new[]{"Overview","Taskbar","Resource monitor","Text & icons","Desktop tools","General","About"}[i]:
+                        new[]{"概览","任务栏外观","资源监控","文字与图标","桌面工具","通用设置","关于"}[i];
                     if((Nav.MenuItems[i] as NavigationViewItem)?.Content?.ToString()!=expected)
                         throw new IOException("Navigation labels did not update to "+locale);
                 }
@@ -74,7 +74,7 @@ public sealed partial class MainWindow
                 reports.Add(new{locale,selectionSaved=true,customNamesPreserved=true,monitorPreferencesPreserved=true,
                     responsiveCases=document.RootElement.GetProperty("checks").GetArrayLength(),rootShortcutTooltipHidden=true});
             }
-            Nav.SelectedItem=Nav.MenuItems[4];ChangeLanguage("System");await Task.Delay(250);
+            NavigateTo("general");ChangeLanguage("System");await Task.Delay(250);
             string expectedSystem=Localizer.ResolveLanguage("System",AppLocalization.SystemLanguage);
             if(Root.Language!=expectedSystem || store.Load().Language!="System" || languageSelector?.SelectedIndex!=0)
                 throw new IOException("Follow system did not resolve or persist correctly.");

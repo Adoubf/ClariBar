@@ -9,8 +9,7 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.7.0</Version>
+    <ApplicationManifest>$(BaseIntermediateOutputPath)ClariBar.app.manifest</ApplicationManifest>
     <ApplicationIcon>..\..\assets\branding\ClariBar.ico</ApplicationIcon>
     <AssemblyName>ClariBar</AssemblyName>
     <Authors>Haoyue</Authors>
@@ -20,6 +19,7 @@
     <RepositoryUrl>https://github.com/Adoubf/ClariBar</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include="Translation\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\assets\branding\claribar-256.png" Link="Assets\ClariBar.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\assets\branding\ClariBar.ico" Link="ClariBar.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -27,7 +27,14 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />
     <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
   </ItemGroup>
+  <Target Name="GenerateApplicationIdentity" BeforeTargets="PrepareForBuild">
+    <MakeDir Directories="$(BaseIntermediateOutputPath)" />
+    <WriteLinesToFile File="$(ApplicationManifest)"
+      Lines="$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\app.manifest').Replace('@CLARIBAR_FILE_VERSION@', '$(FileVersion)'))"
+      Overwrite="true" WriteOnlyWhenDifferent="true" Encoding="UTF-8" />
+  </Target>
   <!-- The current WinUI SDK copies generated XAML/PRI to TargetDir but omits
        them from dotnet publish for an unpackaged, self-contained application. -->
   <Target Name="PublishApplicationXamlResources" AfterTargets="Publish">

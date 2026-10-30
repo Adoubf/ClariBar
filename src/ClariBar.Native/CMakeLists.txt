@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 project(ClariBarNative LANGUAGES CXX)
-add_library(ClariBar.Native SHARED native.cpp explorer_bridge.cpp)
+add_library(ClariBar.Native SHARED native.cpp explorer_bridge.cpp accessibility.cpp transparent_window.cpp live_picker.cpp)
 target_compile_features(ClariBar.Native PRIVATE cxx_std_20)
 target_compile_options(ClariBar.Native PRIVATE /utf-8 /W4)
 target_compile_definitions(ClariBar.Native PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0A00)
-target_link_libraries(ClariBar.Native PRIVATE user32 gdi32 shell32 dwmapi ole32 oleaut32 dwrite)
+target_link_libraries(ClariBar.Native PRIVATE user32 gdi32 shell32 dwmapi ole32 oleaut32 dwrite comctl32)
 set_target_properties(ClariBar.Native PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_subdirectory(../ClariBar.ExplorerTap ${CMAKE_BINARY_DIR}/ExplorerTap)
 

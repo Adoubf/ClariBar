@@ -3,8 +3,8 @@
 1 ICON "@BRAND_ICON@"
 101 RCDATA "@INNER_SETUP@"
 1 VERSIONINFO
- FILEVERSION 0,7,0,0
- PRODUCTVERSION 0,7,0,0
+ FILEVERSION @APP_NUMERIC_VERSION@
+ PRODUCTVERSION @APP_NUMERIC_VERSION@
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_APP
 BEGIN
@@ -14,10 +14,10 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "Haoyue\0"
    VALUE "FileDescription", "ClariBar Setup\0"
-   VALUE "FileVersion", "0.7.0.0\0"
+   VALUE "FileVersion", "@APP_FILE_VERSION@\0"
    VALUE "ProductName", "ClariBar\0"
-   VALUE "ProductVersion", "0.7.0\0"
-   VALUE "OriginalFilename", "ClariBar-Setup-0.7.0-x64.exe\0"
+   VALUE "ProductVersion", "@APP_DISPLAY_VERSION@\0"
+   VALUE "OriginalFilename", "ClariBar-Setup-@APP_DISPLAY_VERSION@-x64.exe\0"
   END
  END
  BLOCK "VarFileInfo"

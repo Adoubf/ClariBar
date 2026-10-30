@@ -8,16 +8,18 @@
    <TitleBar.Resources><HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment></TitleBar.Resources>
    <TitleBar.LeftHeader>
     <Button x:Name="HelpButton" Content="Help" Style="{ThemeResource SubtleButtonStyle}" AutomationProperties.Name="Help" ToolTipService.ToolTip="Help and shortcuts (F1)">
-     <Button.Flyout><MenuFlyout>
+     <Button.Flyout><MenuFlyout Placement="BottomEdgeAlignedLeft">
       <MenuFlyoutItem x:Name="HelpMenuItem" Text="Help" Click="Help_Click"><MenuFlyoutItem.Icon><SymbolIcon Symbol="Help"/></MenuFlyoutItem.Icon></MenuFlyoutItem>
       <MenuFlyoutItem x:Name="ShortcutsMenuItem" Text="Keyboard shortcuts" Click="Shortcuts_Click"><MenuFlyoutItem.Icon><FontIcon Glyph="&#xE765;"/></MenuFlyoutItem.Icon></MenuFlyoutItem>
       <MenuFlyoutSeparator/>
-      <MenuFlyoutItem x:Name="AboutMenuItem" Text="About ClariBar" Click="About_Click"/>
+      <MenuFlyoutItem x:Name="AboutMenuItem" Text="About ClariBar" Click="About_Click"><MenuFlyoutItem.Icon><FontIcon Glyph="&#xE946;"/></MenuFlyoutItem.Icon></MenuFlyoutItem>
      </MenuFlyout></Button.Flyout>
     </Button>
    </TitleBar.LeftHeader>
    <TitleBar.Content>
-    <AutoSuggestBox x:Name="SearchBox" PlaceholderText="Find sensors" QueryIcon="Find" MaxWidth="460" MinWidth="120" Margin="24,0,24,0" HorizontalAlignment="Stretch" VerticalAlignment="Center" QuerySubmitted="Search_Submitted" AutomationProperties.Name="Find sensors"/>
+    <Grid x:Name="TitleSearchHost">
+     <AutoSuggestBox x:Name="SearchBox" PlaceholderText="Find sensors" QueryIcon="Find" MaxWidth="460" MinWidth="120" Width="460" HorizontalAlignment="Left" VerticalAlignment="Center" QuerySubmitted="Search_Submitted" AutomationProperties.Name="Find sensors"/>
+    </Grid>
    </TitleBar.Content>
   </TitleBar>
   <Border x:Name="BodySurface" Grid.Row="1" Margin="8,0,8,8" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" CornerRadius="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
@@ -40,8 +42,9 @@
     <NavigationViewItem Content="Taskbar" Tag="taskbar"><NavigationViewItem.Icon><FontIcon Glyph="&#xE7F4;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem Content="Resource monitor" Tag="sensors"><NavigationViewItem.Icon><FontIcon Glyph="&#xE9D9;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem Content="Text &amp; icons" Tag="colors"><NavigationViewItem.Icon><SymbolIcon Symbol="FontColor"/></NavigationViewItem.Icon></NavigationViewItem>
+    <NavigationViewItem Content="Desktop tools" Tag="tools"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8A7;"/></NavigationViewItem.Icon></NavigationViewItem>
     <NavigationViewItem Content="General" Tag="general"><NavigationViewItem.Icon><SymbolIcon Symbol="Setting"/></NavigationViewItem.Icon></NavigationViewItem>
-    <NavigationViewItem Content="About" Tag="about"><NavigationViewItem.Icon><SymbolIcon Symbol="Help"/></NavigationViewItem.Icon></NavigationViewItem>
+    <NavigationViewItem Content="About" Tag="about"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;"/></NavigationViewItem.Icon></NavigationViewItem>
    </NavigationView.MenuItems>
    <NavigationView.PaneFooter>
     <StackPanel x:Name="PaneFooterContent" Margin="16,12,8,20" Spacing="12">
@@ -49,7 +52,7 @@
       <TextBlock x:Name="MottoTitle" Text="Your taskbar, your rhythm" FontSize="13" FontWeight="SemiBold"/>
       <TextBlock x:Name="MottoSubtitle" Text="Style and system status, together" Style="{StaticResource SecondaryText}"/>
      </StackPanel>
-     <TextBlock x:Name="FooterVersion" Text="Version 0.7.0" Style="{StaticResource SecondaryText}" ToolTipService.ToolTip="ClariBar 0.7.0"/>
+     <TextBlock x:Name="FooterVersion" Text="ClariBar" Style="{StaticResource SecondaryText}" ToolTipService.ToolTip="ClariBar"/>
     </StackPanel>
    </NavigationView.PaneFooter>
    <Border x:Name="PageSurface" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="12" Margin="0,8,8,8">

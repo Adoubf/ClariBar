@@ -68,12 +68,13 @@ public sealed partial class MainWindow : Window
         store = new SettingsStore(smokeTest ? Path.Combine(AppPaths.Data, "smoke-session") : AppPaths.Data);
         settings = store.Load();
         if(smokeTest && AppLocalization.TestOverride is {} languageOverride)settings.Language=Localizer.NormalizePreference(languageOverride);
-        if(NetworkMetrics.Migrate(settings))Save();
+        if(NetworkMetrics.Migrate(settings) | DesktopShortcuts.Migrate(settings) | TranslationProtocol.MigrateLanguages(settings))Save();
         InitializeComponent();
         Root.AddHandler(UIElement.PointerPressedEvent,new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPagePointerPressed),true);
         Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)CommitFontSize(true);};
         Title = L.T("ClariBar");
         hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        desktopTools = new DesktopToolsController(this, settings, Save);
         AppWindow.Resize(new SizeInt32(1220, 860));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "ClariBar.ico"));
         InitializeShell();ApplyTheme();
@@ -83,15 +84,17 @@ public sealed partial class MainWindow : Window
             else if (action == 2) _ = QuitAsync();
             else if (action == 3) { settings.MiniMonitorEnabled = !settings.MiniMonitorEnabled; Save(); UpdateMonitor(); if (page == "taskbar") RenderPage(); }
             else if(action==4){settings.TaskbarMonitorEnabled=!settings.TaskbarMonitorEnabled;TaskbarChanged();if(page=="taskbar")RenderPage();}
+            else if(action is >=10 and <=22)_=ExecuteDesktopCommandAsync(action);
         });
         try { Native.CB_SetLanguage(Localizer.IsChinese?1:0);nativeReady = Native.CB_Start(trayCallback) == 1; }
         catch (Exception ex) { connection = L.F("Native module unavailable: {0}", ex.Message); }
+        ConfigureToolHotkeys();
         AppWindow.Closing += (sender, e) =>
         {
             CommitFontSize(true);
             if (quitting) return;
             e.Cancel = true;
-            if (settings.CloseToTray && nativeReady && !smokeTest) Native.ShowWindow(hwnd, 0);
+            if (settings.CloseToTray && nativeReady && !smokeTest) DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, HideForTool);
             else _ = QuitAsync();
         };
         string? requestedPage=Environment.GetCommandLineArgs().FirstOrDefault(arg=>arg.StartsWith("--page="))?[7..];
@@ -101,7 +104,8 @@ public sealed partial class MainWindow : Window
         freshnessTimer.Start();
         _ = ConnectAsync(Environment.GetCommandLineArgs().Contains("--elevated") || (!smokeTest && settings.HardwareAccessEnabled));
         if (!smokeTest && TaskbarController.Needed(settings)) _ = EnsureTaskbarAsync();
-        if (smokeTest) _ = SmokeTestAsync();
+        if(!smokeTest)desktopRestore=desktopTools.RestoreAsync();
+        if (smokeTest) { if (Environment.GetCommandLineArgs().Contains("--desktop-tools-check")) _ = CheckDesktopToolsAsync(); else _ = SmokeTestAsync(); }
     }
 
     private async Task ConnectAsync(bool elevated,bool fallback=false)
@@ -148,7 +152,7 @@ public sealed partial class MainWindow : Window
             next.Failed+=cancelled=>DispatcherQueue.TryEnqueue(()=>
             {
                 if(broker!=next || quitting || !elevated)return;
-                settings.HardwareAccessEnabled=false;Save();
+                if(cancelled){settings.HardwareAccessEnabled=false;Save();}
                 _=ConnectAsync(false,true);
             });
             next.Start(elevated);
@@ -182,7 +186,7 @@ public sealed partial class MainWindow : Window
         string title = page switch
         {
             "taskbar" => L.T("Taskbar"), "sensors" => L.T("Resource monitor"), "colors" => L.T("Text & icons"),
-            "general" => L.T("General"), "about" => L.T("About ClariBar"), _ => L.T("Overview")
+            "tools" => L.T("Desktop tools"), "general" => L.T("General"), "about" => L.T("About ClariBar"), _ => L.T("Overview")
         };
         PageContent.Children.Add(new TextBlock { Text = L.T("ClariBar  ›  ") + title, Style = SecondaryStyle, Margin = new Thickness(0, 0, 0, 2) });
         var pageTitle=new TextBlock {Text=title,FontSize=28,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center};
@@ -206,6 +210,7 @@ public sealed partial class MainWindow : Window
             case "taskbar": BuildTaskbar(); break;
             case "sensors": BuildSensors(); break;
             case "colors": BuildColors(); break;
+            case "tools": BuildDesktopTools(); break;
             case "general": BuildGeneral(); break;
             case "about": BuildAbout(); break;
             default: BuildOverview(); break;
@@ -232,7 +237,7 @@ public sealed partial class MainWindow : Window
         grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        var icon = new FontIcon { Glyph = glyph, FontSize = 20, Width = 24, VerticalAlignment = VerticalAlignment.Center };
+        var icon = SettingsIcons.Create(title,glyph);
         grid.Children.Add(icon);
         var text = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(new TextBlock { Text = title, FontSize = 14, TextWrapping = TextWrapping.Wrap });
@@ -558,7 +563,7 @@ public sealed partial class MainWindow : Window
             if (value.Length == 0) settings.SensorNames.Remove(reading.Id); else settings.SensorNames[reading.Id] = value[..Math.Min(value.Length, 48)];
             Save(); RefreshSensorRows(); UpdateMonitor();
         }));
-        PageContent.Children.Add(new Expander { Header = L.T("Custom metric names"), Content = names, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
+        PageContent.Children.Add(SettingsIcons.Section(L.T("Custom metric names"),names));
         PopulateDevices();
     }
 
@@ -693,20 +698,14 @@ public sealed partial class MainWindow : Window
         var selection = new ComboBox { DisplayMemberPath="DisplayName", PlaceholderText=L.T("Select a metric"), HorizontalAlignment=HorizontalAlignment.Stretch,
             ItemsSource=CustomizableSensors() };
         metricColorSelector=selection;
-        var picker=new ColorPicker { IsAlphaEnabled=false,Color=ParseColor(settings.MonitorColor) };
-        bool updating=false;
-        selection.SelectionChanged+=(_,_)=>
-        {
-            if(selection.SelectedItem is SensorReading reading){updating=true;picker.Color=ParseColor(settings.SensorColors.GetValueOrDefault(reading.Id,settings.MonitorColor));updating=false;}
-        };
-        picker.ColorChanged+=(_,args)=>
-        {
-            if(updating || selection.SelectedItem is not SensorReading reading)return;
-            settings.SensorColors[reading.Id]=$"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}";TaskbarChanged();
-        };
         var actions=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
-        actions.Children.Add(new Button {Content=L.T("Choose color"),Flyout=new Flyout{Content=picker}});
-        actions.Children.Add(Button(L.T("Use default color"),()=>{if(selection.SelectedItem is SensorReading reading){settings.SensorColors.Remove(reading.Id);TaskbarChanged();updating=true;picker.Color=ParseColor(settings.MonitorColor);updating=false;}}));
+        actions.Children.Add(Button(L.T("Choose color"),()=>
+        {
+            if(selection.SelectedItem is not SensorReading reading)return;
+            ScreenColor.TryParse(settings.SensorColors.GetValueOrDefault(reading.Id,settings.MonitorColor),out var color);
+            desktopTools.OpenColor(color,hex=>{settings.SensorColors[reading.Id]=hex;TaskbarChanged();});
+        }));
+        actions.Children.Add(Button(L.T("Use default color"),()=>{if(selection.SelectedItem is SensorReading reading){settings.SensorColors.Remove(reading.Id);TaskbarChanged();}}));
         var perMetric=new StackPanel {Spacing=10};perMetric.Children.Add(selection);perMetric.Children.Add(actions);
         Row(L.T("Per-metric text colors"), L.T("Colors are stored by sensor identifier and shared by embedded and floating monitors."), new TextBlock(), "\uE790");
         PageContent.Children.Add(Card(perMetric));
@@ -728,25 +727,23 @@ public sealed partial class MainWindow : Window
     }
     private void SystemColorRow(string title,string glyph,string color,bool enabled,Action<bool> toggle,Action<string> change)
     {
-        var picker=new ColorPicker { Color=ParseColor(color),IsAlphaEnabled=false };
         var label=new TextBlock {Text=color};
-        picker.ColorChanged+=(_,args)=>{string hex=$"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}";label.Text=hex;change(hex);TaskbarChanged();};
         var controls=new StackPanel {Orientation=Orientation.Horizontal,Spacing=12};
-        controls.Children.Add(new Button {Content=label,Flyout=new Flyout {Content=picker},VerticalAlignment=VerticalAlignment.Center});
+        var choose=new Button {Content=label,VerticalAlignment=VerticalAlignment.Center};
+        choose.Click+=(_,_)=>{ScreenColor.TryParse(label.Text,out var current);desktopTools.OpenColor(current,hex=>{label.Text=hex;change(hex);TaskbarChanged();});};
+        controls.Children.Add(choose);
         controls.Children.Add(Toggle(enabled,value=>{toggle(value);TaskbarChanged();}));
         Row(title,L.T("Enable a fixed color or disable it to follow Windows. Individual colors override the general tray color."),controls,glyph);
     }
     private void AddColorPicker(string title, string value, Action<string> changed)
     {
-        var picker = new ColorPicker { Color = ParseColor(value), IsAlphaEnabled = false, IsColorSliderVisible = true,
-            IsColorChannelTextInputVisible = true, IsHexInputVisible = true, MinWidth = 300 };
         var hexText = new TextBlock { Text = value, VerticalAlignment = VerticalAlignment.Center };
-        picker.ColorChanged += (_, args) =>
+        var button = new Button { Content = hexText };
+        button.Click += (_, _) =>
         {
-            string hex = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}";
-            changed(hex); hexText.Text = hex; TaskbarChanged();
+            ScreenColor.TryParse(hexText.Text, out var current);
+            desktopTools.OpenColor(current, hex => { changed(hex); hexText.Text = hex; TaskbarChanged(); });
         };
-        var button = new Button { Content = hexText, Flyout = new Flyout { Content = picker } };
         Row(title, L.T("Open the color picker to preview changes immediately."), button, "\uE790");
     }
     private static Color ParseColor(string hex) => Color.FromArgb(255, Convert.ToByte(hex[1..3], 16), Convert.ToByte(hex[3..5], 16), Convert.ToByte(hex[5..7], 16));
@@ -777,8 +774,8 @@ public sealed partial class MainWindow : Window
         Row(L.T("Open-source dependencies"), L.T("LibreHardwareMonitor: MPL-2.0. Windows App SDK, .NET and other dependency licenses are included with the application."), Button(L.T("Open application folder"),()=>OpenFolder(AppContext.BaseDirectory)), "\uE8A5");
     }
 
-    private void ApplyTheme() => Root.RequestedTheme = settings.Theme switch
-    { "Light" => ElementTheme.Light, "Dark" => ElementTheme.Dark, _ => ElementTheme.Default };
+    private void ApplyTheme()
+    { Root.RequestedTheme = settings.Theme switch { "Light" => ElementTheme.Light, "Dark" => ElementTheme.Dark, _ => ElementTheme.Default }; desktopTools?.RefreshAppearance(); }
     private void Save()
     {
         try { store.Save(settings); }
@@ -862,7 +859,7 @@ public sealed partial class MainWindow : Window
             taskbar.Refresh();
             File.WriteAllText(Path.ChangeExtension(path,"tree.txt"),Native.ReadTaskbarTree());
             File.WriteAllText(path, JsonSerializer.Serialize(new
-            { version = "0.7.0", system = Environment.OSVersion.VersionString, connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
+            { version = AppVersion, system = Environment.OSVersion.VersionString, connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
                 new JsonSerializerOptions(Wire.Json) { WriteIndented = true }));
             _ = MessageAsync(L.T("Diagnostics exported"), path);
         }
@@ -875,15 +872,22 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog { Title = title, Content = message, CloseButtonText = L.T("OK"), XamlRoot = Root.XamlRoot };
         try { await dialog.ShowAsync(); } catch (InvalidOperationException) { }
     }
-    private void ShowSettings() { Native.ShowWindow(hwnd, 9); Activate(); Native.SetForegroundWindow(hwnd); }
+    private void ShowSettings()
+    {
+        SynchronizeTranslationPreferences();
+        Native.ClearCaptionHover(hwnd); Native.ShowWindow(hwnd, 9); Activate(); Native.SetForegroundWindow(hwnd);
+        PageScroll.Focus(FocusState.Programmatic);
+    }
     private async Task QuitAsync()
     {
         if (quitting) return;
         CommitFontSize(false);
         quitting = true; freshnessTimer.Stop();
+        await desktopTools.ShutdownAsync();
         if (nativeReady) { Native.CB_Stop(); nativeReady = false; }
         if (broker is not null) await broker.DisposeAsync();
         Close();
+        Application.Current.Exit();
     }
 
     private async Task CheckFontSizeEditingAsync()

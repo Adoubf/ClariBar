@@ -1,4 +1,9 @@
-﻿#define AppVersion "0.7.0"
+#ifndef AppVersion
+  #error "Use scripts/package.ps1 to supply the version from Version.props."
+#endif
+#ifndef AppFileVersion
+  #error "Use scripts/package.ps1 to supply AppFileVersion."
+#endif
 #ifndef SourceRoot
   #define SourceRoot AddBackslash(SourcePath) + ".."
 #endif
@@ -45,7 +50,7 @@ RestartApplications=no
 SetupLogging=yes
 ChangesAssociations=no
 Uninstallable=yes
-VersionInfoVersion={#AppVersion}.0
+VersionInfoVersion={#AppFileVersion}
 VersionInfoDescription=ClariBar Setup
 VersionInfoProductName=ClariBar
 VersionInfoOriginalFileName=ClariBar-Setup-{#AppVersion}-x64.exe

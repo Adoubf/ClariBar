@@ -61,7 +61,7 @@ public sealed partial class MainWindow
         AutomationProperties.SetName(PaneIcon,Localizer.T("ClariBar icon"));
         MottoTitle.Text=Localizer.T("Your taskbar, your rhythm");
         MottoSubtitle.Text=Localizer.T("Style and system status, together");
-        var names=new[]{"Overview","Taskbar","Resource monitor","Text & icons","General","About"};
+        var names=new[]{"Overview","Taskbar","Resource monitor","Text & icons","Desktop tools","General","About"};
         for(int i=0;i<Nav.MenuItems.Count;i++)
         {
             if(Nav.MenuItems[i] is not NavigationViewItem item)continue;
@@ -102,5 +102,6 @@ public sealed partial class MainWindow
         if(nativeReady)Native.CB_SetLanguage(Localizer.IsChinese?1:0);
         sensorRows.Clear();rowIndex.Clear();
         Save();renderedPage="";RenderPage();UpdatePaneAppearance();UpdateMonitor();
+        desktopTools.RefreshAppearance();
     }
 }

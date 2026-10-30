@@ -3,7 +3,8 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
 $sourceRoot = Split-Path $PSScriptRoot
 $cache = $env:CLARIBAR_ROOT
-$artifact = "$cache\artifacts\ClariBar\0.7.0"
+$versionInfo=& "$PSScriptRoot\Get-ClariBarVersion.ps1"
+$artifact = "$cache\artifacts\ClariBar\$($versionInfo.DisplayVersion)"
 Set-Location $sourceRoot
 if (Get-Process -Name ClariBar -ErrorAction SilentlyContinue) {
     throw 'Quit ClariBar from the system tray before rebuilding.'

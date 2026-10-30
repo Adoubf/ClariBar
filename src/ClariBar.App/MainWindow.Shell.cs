@@ -1,4 +1,5 @@
 using L = ClariBar.Core.Localizer;
+using ClariBar.Core;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -13,7 +14,7 @@ namespace ClariBar.App;
 
 public sealed partial class MainWindow
 {
-    private const string AppVersion="0.7.0";
+    private static readonly string AppVersion=ProductInfo.DisplayVersion;
     private readonly List<Action<double>> responsiveLayouts=[];
     private readonly UISettings uiPreferences=new();
     private Storyboard? pageMotion,paneMotion,themeMotion;
@@ -34,7 +35,9 @@ public sealed partial class MainWindow
         {presenter.PreferredMinimumWidth=600;presenter.PreferredMinimumHeight=480;}
         Root.Loaded+=(_,_)=>{shellReady=true;ApplyChromeColors();ApplyShellLayout();};
         Root.SizeChanged+=(_,_)=>ApplyShellLayout();
-        Root.ActualThemeChanged+=(_,_)=>{ApplyChromeColors();Animate(Root,ref themeMotion,0,0,.82,160);};
+        TitleSearchHost.SizeChanged+=(_,_)=>CenterSearchBox();
+        TitleSearchHost.LayoutUpdated+=(_,_)=>CenterSearchBox();
+        Root.ActualThemeChanged+=(_,_)=>{if(quitting)return;ApplyChromeColors();Animate(Root,ref themeMotion,0,0,.82,160);};
         PageContent.SizeChanged+=(_,_)=>UpdateResponsiveLayouts();
         Nav.RegisterPropertyChangedCallback(NavigationView.IsPaneOpenProperty,(_,_)=>UpdatePaneAppearance());
         foreach(var item in Nav.MenuItems.OfType<NavigationViewItem>())
@@ -50,9 +53,9 @@ public sealed partial class MainWindow
     }
     private void ApplyChromeColors()
     {
+        if(quitting || AppWindow.TitleBar is not {} title)return;
         bool dark=Root.ActualTheme==ElementTheme.Dark;
         var fill=ParseColor(dark?"#202020":"#ECF6F9");var ink=dark?Colors.White:Colors.Black;
-        var title=AppWindow.TitleBar;
         title.BackgroundColor=title.InactiveBackgroundColor=fill;
         title.ButtonBackgroundColor=title.ButtonInactiveBackgroundColor=fill;
         title.ForegroundColor=title.ButtonForegroundColor=ink;
@@ -75,8 +78,28 @@ public sealed partial class MainWindow
         BodySurface.Margin=small?new Thickness(4,0,4,4):new Thickness(8,0,8,8);
         BodySurface.CornerRadius=new CornerRadius(small?12:16);
         PageScroll.Padding=small?new Thickness(16,18,16,24):new Thickness(28,22,28,32);
-        SearchBox.Margin=small?new Thickness(8,0,8,0):new Thickness(24,0,24,0);
+        CenterSearchBox();
         UpdatePaneAppearance();UpdateResponsiveLayouts();
+    }
+    private void CenterSearchBox()
+    {
+        if(!shellReady || quitting || TitleSearchHost.ActualWidth<=0)return;
+        // TitleBar's Compact state left-aligns its ContentPresenter. Give our
+        // host the available slot width so resizing can grow it again.
+        if(VisualTreeHelper.GetParent(TitleSearchHost) is ContentPresenter presenter &&
+           VisualTreeHelper.GetParent(presenter) is FrameworkElement slot)
+        {
+            double available=Math.Max(120,slot.ActualWidth-presenter.Margin.Left-presenter.Margin.Right);
+            if(!double.IsFinite(TitleSearchHost.Width) || Math.Abs(TitleSearchHost.Width-available)>.25)
+                TitleSearchHost.Width=available;
+        }
+        double left=TitleSearchHost.TransformToVisual(Root).TransformPoint(new()).X;
+        double center=Root.ActualWidth/2-left;
+        double halfRoom=Math.Min(center,TitleSearchHost.ActualWidth-center)-8;
+        double width=Math.Clamp(halfRoom*2,120,460);
+        double offset=Math.Clamp(center-width/2,0,Math.Max(0,TitleSearchHost.ActualWidth-width));
+        if(Math.Abs(SearchBox.Width-width)>.25)SearchBox.Width=width;
+        if(Math.Abs(SearchBox.Margin.Left-offset)>.25)SearchBox.Margin=new Thickness(offset,0,0,0);
     }
     private void UpdatePaneAppearance()
     {
@@ -168,7 +191,7 @@ public sealed partial class MainWindow
     }
     private void Help_Click(object sender,RoutedEventArgs args)=>_=ShowHelpAsync();
     private void Shortcuts_Click(object sender,RoutedEventArgs args)=>_=ShowHelpAsync(true);
-    private void About_Click(object sender,RoutedEventArgs args)=>Nav.SelectedItem=Nav.MenuItems[5];
+    private void About_Click(object sender,RoutedEventArgs args)=>NavigateTo("about");
     private async Task ShowHelpAsync(bool shortcuts=false)
     {
         var content=new StackPanel {Spacing=16,MaxWidth=480};
@@ -180,9 +203,13 @@ public sealed partial class MainWindow
             Section(L.T("Temperatures and fans"),L.T("Choose Authorize hardware access to connect hardware sensors. Connection status appears on Overview and Resource monitor. Unsupported sensors explain why readings are unavailable."));
             Section(L.T("Text and colors"),L.T("Adjust fonts, size, layout and colors on Text & icons. Press Enter or click outside the font size box to save."));
             Section(L.T("Navigation and window layout"),L.T("Use the toolbar button to collapse navigation to icons. Content reflows in smaller windows. Hover over an icon to see its page name."));
+            Section(L.T("Desktop tools"),L.T("Use Desktop tools or the tray menu to capture a region or window, pick a screen color, pin an image or extract text. Choose local or AI recognition in Screenshots & OCR. AI recognition sends only the selected image."));
             Section(L.T("Closing and quitting"),L.T("Closing the window keeps monitoring active by default. Quit from the system tray to restore the taskbar."));
         }
-        Section(L.T("Keyboard shortcuts"),L.T("F1    Open help\nCtrl + F    Find sensors\nCtrl + B    Expand or collapse navigation\nEnter    Confirm font size\nEsc    Cancel font size editing"));
+        Section(L.T("Screenshot controls"),L.T("Enter / double-click: copy · Ctrl+T / middle-click: pin\nCtrl+S: Save As · Ctrl+Shift+S: Quick Save\nTab: window / element detection · R: last region · , / .: history\nArrow keys: move · Ctrl+arrows: enlarge · Shift+arrows: shrink\nSpace: toolbar · Alt: magnifier · C: copy color · Shift: color format\nCtrl+Z / Ctrl+Y: undo / redo · Ctrl+Shift+Z: clear annotations"));
+        string Key(string shortcut)=>string.IsNullOrWhiteSpace(shortcut)?L.T("Not assigned"):shortcut;
+        Section(L.T("Pinned image controls"),L.F("Drag: move · Shift+drag: snap · Wheel: zoom · Ctrl+wheel: opacity\n1 / 2: rotate (GIF: step frame) · 3 / 4: mirror\nMiddle-click: reset · Shift+double-click: thumbnail · Space: annotate\nEsc / double-click: recoverable close · Shift+Esc: destroy\n{0}: show / hide images · {1}: click-through",Key(settings.HidePinsHotkey),Key(settings.ClickThroughHotkey)));
+        Section(L.T("Keyboard shortcuts"),L.F("Ctrl+F: find sensors · Ctrl+B: navigation\n{0}: screenshot · {1}: screen color picker\n{2}: paste clipboard image · {3}: extract text\n{4}: screenshot translation\nEnter: confirm font size · Esc: cancel editing or capture",Key(settings.CaptureHotkey),Key(settings.ColorHotkey),Key(settings.PinHotkey),Key(settings.OcrHotkey),Key(settings.TranslationHotkey)));
         var dialog=new ContentDialog {Title=shortcuts?L.T("Keyboard shortcuts"):L.T("Help"),Content=new ScrollViewer {Content=content,MaxHeight=Math.Max(180,Root.ActualHeight-200)},CloseButtonText=L.T("Close"),XamlRoot=Root.XamlRoot};
         try
         {

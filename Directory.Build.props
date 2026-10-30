@@ -1,4 +1,5 @@
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)Version.props" />
   <PropertyGroup>
     <ClariBarRoot Condition="'$(ClariBarRoot)' == '' and '$(CLARIBAR_ROOT)' != ''">$(CLARIBAR_ROOT)\</ClariBarRoot>
     <ClariBarRoot Condition="'$(ClariBarRoot)' == ''">$(MSBuildThisFileDirectory).build\</ClariBarRoot>
