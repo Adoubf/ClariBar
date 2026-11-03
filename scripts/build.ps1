@@ -34,6 +34,8 @@ try {
     Copy-Item "$sourceRoot\licenses\*" "$artifact\licenses" -Recurse -Force
     Copy-Item "$sourceRoot\README.md" $artifact -Force
     if ($Check) {
+        & ctest --test-dir "$cache\build\claribar-native" --output-on-failure
+        if ($LASTEXITCODE -ne 0) { throw 'Native taskbar layout checks failed' }
         $project="$sourceRoot\tests\ClariBar.Checks\ClariBar.Checks.csproj"
         & dotnet build $project -c Release --nologo
         if ($LASTEXITCODE -ne 0) { throw 'Checks build failed' }

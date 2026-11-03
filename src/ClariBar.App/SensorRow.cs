@@ -11,8 +11,8 @@ public sealed class SensorRow : INotifyPropertyChanged
     private bool fresh;
     public string Id => Reading.Id;
     public string Name => string.IsNullOrWhiteSpace(alias) ? Reading.DisplayName : alias;
-    public string Details => $"{Reading.Name}\n{Reading.Id}";
-    public string Device => Reading.Hardware;
+    public string Details => $"{Reading.Name}\n{Reading.Id}" + (Id == DiskSpaceMetrics.UsageId ? "\n" + L.T("Used space across accessible local fixed disks divided by their combined capacity. Each volume is counted once; network and removable drives are excluded.") : "");
+    public string Device => Reading.DisplayHardware;
     public string Kind => SensorLabels.Kind(Reading.Kind);
     public string Value => SensorFormatting.Value(Reading, fresh);
     public string Status => fresh ? Reading.StatusText : L.T("Stale data");

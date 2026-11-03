@@ -19,11 +19,12 @@ if(args.FirstOrDefault()=="--runtime")
     Require(common.All(sensor=>sensor.IsValid),"Every displayed common sensor has a valid reading");
     Require(common.Single(sensor=>sensor.HardwareType=="Memory").HardwareId=="/ram","Common memory uses physical RAM");
     Require(common.Any(sensor=>sensor.HardwareType=="Storage" && sensor.Name=="Total Activity") && common.Any(sensor=>sensor.Name=="Read Rate") && common.Any(sensor=>sensor.Name=="Write Rate"),"Physical disks expose active time and read/write rates");
+    Require(common.Any(sensor=>sensor.Id==DiskSpaceMetrics.UsageId && sensor.IsValid),"Live common metrics include aggregate fixed-disk capacity usage");
     Require(live.Network is {Status:"valid",InterfaceIndex:>0} && live.Sensors.Count(sensor=>sensor.HardwareType=="Network")==2,"One default physical uplink and downlink");
     Require(preferences.HardwareAccessEnabled && !preferences.PinnedSensors.Any(id=>id.StartsWith("/nic/")) && preferences.PinnedSensors.Contains(NetworkMetrics.UploadId) && preferences.PinnedSensors.Contains(NetworkMetrics.DownloadId),"Hardware access preference remembered and legacy network pins migrated");
     var report=new {capturedAt=DateTimeOffset.Now,passed=true,elevated=live.Elevated,live.Network,cpuTemperature=cpuTemp.Value,readableCoreFrequencies=frequencies.Length,
         rawSensorCount=live.Sensors.Length,commonCount=common.Length,commonSensors=common,capabilities=live.Capabilities,
-        diskCount=live.Sensors.Where(sensor=>sensor.HardwareType=="Storage").Select(sensor=>sensor.HardwareId).Distinct().Count(),
+        diskCount=live.Sensors.Where(sensor=>sensor.HardwareType=="Storage" && sensor.HardwareId!=DiskSpaceMetrics.HardwareId).Select(sensor=>sensor.HardwareId).Distinct().Count(),
         rememberedHardwareAccess=preferences.HardwareAccessEnabled,pinned=preferences.PinnedSensors};
     File.WriteAllText(Path.Combine(cache,"logs","claribar-runtime-validation.json"),JsonSerializer.Serialize(report,new JsonSerializerOptions(Wire.Json){WriteIndented=true}));
     Console.WriteLine($"Runtime checks passed: CPU {cpuTemp.Value} °C, {frequencies.Length} core clocks, {common.Length} valid common metrics, physical interface {live.Network!.InterfaceIndex}.");
@@ -34,8 +35,11 @@ var results = new List<object>();
 Directory.CreateDirectory(root);
 try
 {
+    ResourceMonitorChecks.Run(Require, root);
+    results.Add(new { name = "disk-capacity-aggregation-and-pinned-order-persistence", passed = true });
     AiOcrProtocolChecks.Run(Require);
     TranslationChecks.Run(Require);
+    await TranslationStreamChecks.RunAsync(Require);
     results.Add(new{name="ai-ocr-protocols-and-lan-configuration",passed=true});
     Require(new PixelRect(-1920, -200, 2560, 1440).Contains(-1, 0), "Negative virtual-desktop coordinates are valid");
     Require(!new PixelRect(0, 0, 100, 100).Contains(100, 50), "Capture rectangles exclude the far edge");
@@ -187,6 +191,13 @@ try
     Require(common.Single(sensor=>sensor.HardwareType=="Memory").Id=="memory","Common memory occupancy uses physical RAM, not virtual memory");
     Require(common.Any(sensor=>sensor.Id=="cpu") && common.Any(sensor=>sensor.Id=="temp") && !common.Any(sensor=>sensor.Id is "thread" or "clock" || sensor.Name=="D3D Copy"),"Common list keeps device totals and primary temperature, excluding per-core frequency and secondary GPU engines");
     Require(!SensorCatalog.Filter(fixture,"全部指标",[],false).Any(sensor=>sensor.Id=="clock") && SensorCatalog.Filter(fixture,"全部指标",[],true).Any(sensor=>sensor.Id=="clock"),"Unavailable advanced channels require explicit display");
+    var pending=networkUp with {Value=null,Status="warming"};
+    var noReadings=fixture with {Sensors=fixture.Sensors.Append(pending with {Id="warming-network"}).Append(cpuTotal with {Id="invalid-value",Value=float.NaN}).ToArray()};
+    foreach(string filter in new[]{"Common metrics","All metrics","Pinned","Temperatures only","Usage only"}.Select(Localizer.T))
+        Require(SensorCatalog.Filter(noReadings,filter,["temp","warming-network","invalid-value"],false).All(sensor=>sensor.IsValid),
+            "Default resource filters exclude unprivileged, warming, unavailable and non-finite readings");
+    Require(SensorCatalog.Filter(noReadings with {CapturedAt=DateTimeOffset.UtcNow.AddMinutes(-1)},"全部指标",[],false).Length==0,
+        "Stale snapshots cannot expose channels without a current reading");
     Require(SensorCatalog.Capabilities(fixture.Sensors).Any(item=>item.Label=="CPU 温度" && item.Status=="requires_admin") && SensorCatalog.Capabilities(fixture.Sensors).Any(item=>item.Label=="GPU 温度" && item.Status=="unsupported"),"Permission requirements and absent GPU temperature remain distinct");
     results.Add(new{name="physical-default-route-rates-common-selection-and-permissions",passed=true});
 
@@ -230,6 +241,8 @@ try
                     Require(data.Network is {InterfaceIndex:>0,Status:"valid"},"Real default physical route selected");
                     Require(data.Sensors.Count(sensor=>sensor.HardwareType=="Network")==2 && data.Sensors.Any(sensor=>sensor.Id==NetworkMetrics.UploadId && sensor.IsValid) && data.Sensors.Any(sensor=>sensor.Id==NetworkMetrics.DownloadId && sensor.IsValid),"Only the physical default uplink and downlink are exposed");
                     Require(SensorCatalog.Common(data).Single(sensor=>sensor.HardwareType=="Memory").HardwareId=="/ram","Live common memory reading uses physical RAM");
+                    Require(data.Sensors.Single(sensor=>sensor.Id==DiskSpaceMetrics.UsageId).IsValid &&
+                        SensorCatalog.Common(data).Any(sensor=>sensor.Id==DiskSpaceMetrics.UsageId),"A non-elevated real broker exposes total fixed-disk capacity usage as a common metric");
                     Require(!SensorCatalog.Common(data).Any(sensor=>sensor.Kind=="Clock" || sensor.Name.Contains("Thread #")),"Live common list excludes per-core and frequency channels");
                     File.WriteAllText(Path.Combine(cache,"logs","claribar-broker-user.json"),JsonSerializer.Serialize(data,new JsonSerializerOptions(Wire.Json){WriteIndented=true}));
                     Console.WriteLine($"Default physical interface {data.Network!.InterfaceIndex}: {data.Network.Name}; excluded {data.Network.ExcludedAdapters} other interfaces.");

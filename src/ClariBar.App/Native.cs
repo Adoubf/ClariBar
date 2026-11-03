@@ -27,6 +27,14 @@ internal static partial class Native
     internal static extern void CB_SetLanguage(int chinese);
     [DllImport("ClariBar.Native.dll", CallingConvention = CallingConvention.StdCall)]
     internal static extern int CB_SetToolHotkey(int slot, uint modifiers, uint key);
+    [StructLayout(LayoutKind.Sequential)]internal struct CopyTrigger {public int X,Y;public uint Sequence,Serial;}
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]internal static extern int CB_SetCopyTranslation(int enabled);
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]internal static extern int CB_GetCopyTranslationTrigger(out CopyTrigger trigger);
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]internal static extern int CB_BeginCopyTranslationRead(uint serial);
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]internal static extern void CB_EndCopyTranslationRead(uint serial,uint sequence);
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]internal static extern int CB_WatchCopyPopup(nint window);
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]internal static extern int CB_PollCopyPopup(nint window);
+    [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]internal static extern void CB_UnwatchCopyPopup(nint window);
     [DllImport("user32.dll")] internal static extern nint SendMessage(nint window, uint message, nint wparam, nint lparam);
     internal static void ClearCaptionHover(nint window)
     {

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$ApplicationDirectory,[string]$ValidationDirectory,[switch]$SnipasteParity,[switch]$CaptureUi,[switch]$PinEditor,[switch]$Interaction,[switch]$AiOcr,[switch]$Translation,[switch]$TranslationLive,[switch]$CaptionHover)
+param([Parameter(Mandatory=$true)][string]$ApplicationDirectory,[string]$ValidationDirectory,[switch]$SnipasteParity,[switch]$CaptureUi,[switch]$PinEditor,[switch]$Interaction,[switch]$AiOcr,[switch]$Translation,[switch]$TranslationLive,[switch]$CaptionHover,[switch]$CopyTranslation,[switch]$Streaming,[switch]$Responsiveness,[switch]$CapturePerformance,[switch]$CopyMenu,[switch]$CopyDismiss,[switch]$Stability,[switch]$TaskbarCompatibility,[switch]$MetricOrder,[switch]$SettingsRefinement)
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\Enter-ClariBarDev.ps1"
 $ApplicationDirectory=[IO.Path]::GetFullPath($ApplicationDirectory)
@@ -18,16 +18,27 @@ foreach($locale in @('en-US','zh-CN')){
  if($Translation){$arguments+=' --translation-check'}
  if($TranslationLive){$arguments+=' --translation-check --translation-live-check'}
  if($CaptionHover){$arguments+=' --caption-hover-check'}
+ if($CopyTranslation){$arguments+=' --copy-translation-check'}
+ if($CopyMenu){$arguments+=' --copy-menu-check'}
+ if($CopyDismiss){$arguments+=' --copy-dismiss-check'}
+ if($Stability){$arguments+=' --stability-check'}
+ if($TaskbarCompatibility){$arguments+=' --taskbar-compat-check'}
+ if($MetricOrder){$arguments+=' --metric-order-check'}
+ if($SettingsRefinement){$arguments+=' --settings-refinement-check'}
+ if($Streaming){$arguments+=' --streaming-translation-check'}
+ if($Responsiveness){$arguments+=' --responsiveness-check'}
+ if($CapturePerformance){$arguments+=' --capture-performance-check'}
  $info=[Diagnostics.ProcessStartInfo]::new("$ApplicationDirectory\ClariBar.exe",$arguments)
  $info.WorkingDirectory=$ApplicationDirectory;$info.UseShellExecute=$false
  $info.EnvironmentVariables['CLARIBAR_ROOT']=$session
  $info.EnvironmentVariables['CLARIBAR_DESKTOP_CHECK_ROOT']=$session
+ if($CopyTranslation -or $CopyMenu -or $CopyDismiss){$info.EnvironmentVariables['CLARIBAR_COPY_PROBE']="$env:CLARIBAR_ROOT\build\claribar-native\ClariBar.CopyProbe.exe"}
  $info.EnvironmentVariables['PATH']="$env:SystemRoot\System32;$env:SystemRoot"
  $info.EnvironmentVariables['DOTNET_ROOT']=Join-Path $session 'no-development-runtime'
  $info.EnvironmentVariables['DOTNET_ROOT_X64']=$info.EnvironmentVariables['DOTNET_ROOT']
  if(Test-Path $report){Remove-Item $report}
  $process=[Diagnostics.Process]::Start($info)
- if(!$process.WaitForExit(120000)){
+ if(!$process.WaitForExit($(if($Stability){240000}else{120000}))){
   if(!$process.HasExited){$process.Kill()}
   throw "Desktop tool checks timed out for $locale. Inspect $session."
  }

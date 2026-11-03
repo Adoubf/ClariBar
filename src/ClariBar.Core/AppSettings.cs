@@ -18,6 +18,7 @@ public sealed class AppSettings
     public string TranslationHotkey { get; set; } = "Ctrl+Alt+A";
     public string TranslationEngine { get; set; } = "Free";
     public string TranslationDisplay { get; set; } = "Bilingual";
+    public bool CopyTranslationEnabled { get; set; } = true;
     public string TranslationSourceLanguage { get; set; } = "Auto";
     public string TranslationTargetLanguage { get; set; } = "Auto";
     public int TranslationLanguageVersion { get; set; }

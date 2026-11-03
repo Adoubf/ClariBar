@@ -28,7 +28,10 @@ internal sealed class BrokerClient : IAsyncDisposable
     {
         string name = "ClariBar-" + Guid.NewGuid().ToString("N");
         string token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        string broker=Path.Combine(AppContext.BaseDirectory,"broker","ClariBar.SensorBroker.exe");
+        string broker=Path.Combine(AppContext.BaseDirectory,"ClariBar.SensorBroker.exe");
+        // Packaged executables share one app-local runtime; also accept the
+        // separate broker directory produced by development builds.
+        if(!File.Exists(broker))broker=Path.Combine(AppContext.BaseDirectory,"broker","ClariBar.SensorBroker.exe");
         bool appHost=File.Exists(broker);
         if(!appHost)broker=Path.ChangeExtension(broker,"dll");
         try

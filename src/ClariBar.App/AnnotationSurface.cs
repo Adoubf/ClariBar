@@ -59,7 +59,7 @@ internal sealed partial class AnnotationSurface:Canvas
         Width=image.Width=preview.Width=handles.Width=Document.Source.Width;
         Height=image.Height=preview.Height=handles.Height=Document.Source.Height;
         Clip=new RectangleGeometry {Rect=new Rect(0,0,Width,Height)};
-        rasterPreviewActive=false;image.Source=Document.Render().Bitmap();if(!handleGesture)ShowHandles();
+        rasterPreviewActive=false;image.Source=(Document.Marks.Count==0?Document.Source:Document.Render()).Bitmap();if(!handleGesture)ShowHandles();
     }
     public void Undo(){FinishText();FinishPolyline();EndEditing();Document.Undo();}
     public void Redo(){FinishText();FinishPolyline();Document.Redo();int last=Document.Marks.Count-1;if(last>=0){Ink.Apply(Document.Marks[last]);active=Transformable(Document.Marks[last])?last:-1;InkChanged?.Invoke();ToolChanged?.Invoke();}ShowHandles();}

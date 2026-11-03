@@ -98,18 +98,20 @@ internal sealed class AiOcrSettingsPanel:UserControl
         configuration.IsEnabled=SaveButton.IsEnabled=TestButton.IsEnabled=RemoveKeyButton.IsEnabled=false;CancelButton.Visibility=Visibility.Visible;
         TestPurpose.IsEnabled=false;
         Status.Title=L.T("Testing connection…");Status.Message=L.T(TestPurpose.SelectedIndex==1?"Checking the API, authentication and translation…":"Checking the API, authentication and image recognition…");Status.Severity=InfoBarSeverity.Informational;Status.IsOpen=true;TestOutput.Visibility=Visibility.Collapsed;
+        TestOutput.Text="";
+        void Preview(string text)=>DispatcherQueue.TryEnqueue(()=>{if(testing!=cancellation || cancellation.IsCancellationRequested)return;TestOutput.Text=text.Length>2000?text[..2000]+"…":text;TestOutput.Visibility=Visibility.Visible;});
         try
         {
             var options=Options();string key=Key.Password.Length>0?Key.Password.Trim():OcrCredential.Read();
             if(TestPurpose.SelectedIndex==1)
             {
                 var sampleSettings=new AppSettings{AiOcrEndpoint=options.Endpoint,AiOcrApiType=options.ApiType,AiOcrTimeoutSeconds=options.TimeoutSeconds,AiTranslationModel=TranslationModel.Text.Trim(),AiTranslationPrompt=TranslationPrompt.Text.Trim()};
-                var watch=System.Diagnostics.Stopwatch.StartNew();string[] output=await TranslationService.TranslateLinesAsync(["Hello world."],"en","zh","Ai",sampleSettings,cancellation.Token,key:key);
+                var watch=System.Diagnostics.Stopwatch.StartNew();string[] output=await TranslationService.TranslateLinesAsync(["Hello world."],"en","zh","Ai",sampleSettings,cancellation.Token,key:key,updated:update=>Preview(update.Text));
                 var endpoint=AiOcrProtocol.Resolve(options with{Model=sampleSettings.AiTranslationModel});
                 Status.Severity=InfoBarSeverity.Success;Status.Title=L.T("Connection and translation succeeded");Status.Message=L.F("{0} · {1} · {2:0.00} s",AiOcrProtocol.ApiLabel(endpoint.ApiType),sampleSettings.AiTranslationModel,watch.ElapsedMilliseconds/1000d);
                 TestOutput.Text=output[0];TestOutput.Visibility=Visibility.Visible;return;
             }
-            var result=await OcrService.TestConnectionAsync(options,key,cancellation.Token);
+            var result=await OcrService.TestConnectionAsync(options,key,cancellation.Token,received:Preview);
             Status.Severity=result.SampleRecognized?InfoBarSeverity.Success:InfoBarSeverity.Warning;
             Status.Title=L.T(result.SampleRecognized?"Connection and image recognition succeeded":"Connected; check the recognition result");
             Status.Message=L.F("{0} · {1} · {2:0.00} s",AiOcrProtocol.ApiLabel(result.Target.ApiType),result.Model,result.ElapsedMilliseconds/1000d);

@@ -19,6 +19,9 @@ internal sealed class DesktopToolsController
     private LiveColorPicker? livePicker;
     private PixelFrame? latest;
     private bool busy,disposed;
+    private readonly CopyTranslationController copyTranslator;
+    internal CopyTranslationWindow? CopyTranslationPopup=>copyTranslator.Window;
+    internal object? LastCaptureStartup {get;private set;}
     public ToolSessionStore Sessions {get;}
     public PinManager Pins {get;}
     public ElementTheme Theme=>settings.Theme switch {"Light"=>ElementTheme.Light,"Dark"=>ElementTheme.Dark,_=>ElementTheme.Default};
@@ -27,12 +30,17 @@ internal sealed class DesktopToolsController
     public DesktopToolsController(MainWindow owner,AppSettings settings,Action save)
     {
         this.owner=owner;this.settings=settings;this.save=save;
+        copyTranslator=new(this,owner.Handle);
         Sessions=new(Path.Combine(owner.ToolDataDirectory,"desktop-tools"));Sessions.LoadHistory();Pins=new(this,Sessions);
     }
     public void Save()=>save();
     public void ShowSettings()=>owner.RestoreFromTool();
     public void Track(Window window)
-    {windows.Add(window);window.Closed+=(_,_)=>windows.Remove(window);window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory,"ClariBar.ico"));}
+    {
+        windows.Add(window);
+        void Closed(object sender,WindowEventArgs args){window.Closed-=Closed;windows.Remove(window);}
+        window.Closed+=Closed;window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory,"ClariBar.ico"));
+    }
     public void RefreshAppearance()
     {
         foreach(var window in windows.ToArray())if(window is not CaptureOverlay && window.Content is FrameworkElement root)
@@ -41,7 +49,7 @@ internal sealed class DesktopToolsController
     public async Task RestoreAsync(){if(!disposed && settings.PinAutoRestore)await Pins.RestoreAsync();}
     public async Task BeginAsync(bool color=false,bool ocr=false,Action<string>? chosen=null,string mode="Region",PixelRect? customArea=null,bool returnToSettings=true,bool translate=false)
     {
-        if(disposed)return;if(busy){overlay?.Activate();return;}
+        if(disposed)return;if(busy){overlay?.Reactivate();return;}
         busy=true;bool settingsVisible=DesktopCapture.IsWindowVisible(owner.Handle),restore=settingsVisible && returnToSettings;
         try
         {
@@ -58,19 +66,24 @@ internal sealed class DesktopToolsController
                 return;
             }
             if(mode=="Delayed" && !await CountdownAsync(settings.CaptureDelaySeconds))return;
-            await Task.Delay(160);DesktopCapture.DwmFlush();var bounds=DesktopCapture.DesktopBounds;
-            var candidates=DesktopCapture.Windows(bounds,owner.Handle);
+            var clock=System.Diagnostics.Stopwatch.StartNew();var bounds=DesktopCapture.DesktopBounds;
             PixelFrame frame;
             if(mode=="Whiteboard"){byte[] white=new byte[checked(bounds.Width*bounds.Height*4)];Array.Fill(white,(byte)255);frame=new(bounds.Width,bounds.Height,white);}
-            else frame=DesktopCapture.Capture(bounds);
+            else frame=await Task.Run(()=>{if(settingsVisible)DesktopCapture.DwmFlush();return DesktopCapture.Capture(bounds);});
+            double snapshotMs=clock.Elapsed.TotalMilliseconds;
             PixelRect? selected=null;
             if(mode is "FullScreen" or "Whiteboard")selected=frame.Bounds;
             else if(mode=="Screen")
             {DesktopCapture.GetCursorPos(out var cursor);var screen=DisplayArea.GetFromPoint(new PointInt32(cursor.X,cursor.Y),DisplayAreaFallback.Nearest).OuterBounds;selected=new(screen.X-bounds.X,screen.Y-bounds.Y,screen.Width,screen.Height);}
             else if(mode=="Last" && Sessions.LastArea is {} last)selected=last with{X=last.X-bounds.X,Y=last.Y-bounds.Y};
             else if(customArea is {} custom)selected=custom with{X=custom.X-bounds.X,Y=custom.Y-bounds.Y};
-            if(disposed)return;overlay=new(this,frame,bounds,candidates,false,ocr,selected);Track(overlay);
-            var result=await overlay.SelectAsync();overlay=null;if(disposed)return;
+            if(disposed)return;using var transition=new CaptureTransition(frame,bounds,selected);double frozenMs=clock.Elapsed.TotalMilliseconds;
+            var candidates=await Task.Run(()=>DesktopCapture.Windows(bounds,owner.Handle,transition.Handle));double candidatesMs=clock.Elapsed.TotalMilliseconds-frozenMs;
+            if(disposed)return;overlay=new(this,frame,bounds,candidates,false,ocr,selected);Track(overlay);double preparedMs=clock.Elapsed.TotalMilliseconds;
+            var selection=overlay.SelectAsync(transition);bool presented=await overlay.FirstPresented;
+            LastCaptureStartup=new{snapshotMs,frozenMs,candidatesMs,preparedMs,interactiveMs=clock.Elapsed.TotalMilliseconds,presented,fallback=overlay.PresentationFallback,width=frame.Width,height=frame.Height,mode,ocr,translate};
+            if(Environment.GetCommandLineArgs().Contains("--diagnostics")){Directory.CreateDirectory(AppPaths.Logs);File.WriteAllText(Path.Combine(AppPaths.Logs,"claribar-capture-startup.json"),System.Text.Json.JsonSerializer.Serialize(LastCaptureStartup,Wire.Json));}
+            var result=await selection;overlay=null;if(disposed)return;
             if(translate && result is not null)restore=false;
             if(restore){owner.RestoreFromTool();restore=false;}
             if(result is null)return;
@@ -127,6 +140,8 @@ internal sealed class DesktopToolsController
     {try{await Pins.PasteAsync();}catch(Exception ex){await owner.ToolErrorAsync(ex.Message);}}
     public void OpenOcr(PixelFrame frame){if(disposed)return;var window=new OcrResultWindow(this,frame);Track(window);window.Activate();}
     public Task BeginTranslationAsync()=>BeginAsync(ocr:true,translate:true);
+    public Task TranslateCopiedTextAsync()=>copyTranslator.ReceiveAsync();
+    public void CancelCopyTranslation()=>copyTranslator.Cancel();
     public void OpenTranslation(PixelFrame frame,PixelRect position)
     {if(disposed)return;var window=new TranslationWindow(this,frame,position,settings.TranslationDisplay=="Overlay");Track(window);window.Activate();}
     public Task<string?> SaveImageAsync(PixelFrame frame,Window parent)=>QuickSaveAsync(frame);
@@ -144,7 +159,7 @@ internal sealed class DesktopToolsController
     public async Task ShowErrorAsync(Exception ex)=>await owner.ToolErrorAsync(ex.Message);
     public async Task ShutdownAsync(){if(disposed)return;await Pins.PersistAsync();CloseAll();}
     public void CloseAll()
-    {disposed=true;livePicker?.Dispose();Pins.Shutdown();foreach(var window in windows.ToArray())window.Close();windows.Clear();latest=null;}
+    {disposed=true;copyTranslator.Dispose();livePicker?.Dispose();Pins.Shutdown();foreach(var window in windows.ToArray())window.Close();windows.Clear();latest=null;}
 }
 
 internal static class ToolUi

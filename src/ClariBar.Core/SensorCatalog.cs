@@ -41,7 +41,8 @@ public static class SensorCatalog
         }
         Pick(snapshot.Sensors.Where(sensor=>sensor.HardwareType=="Memory" && sensor.Kind=="Load" && sensor.HardwareId!="/vram" && !sensor.Hardware.Contains("Virtual",StringComparison.OrdinalIgnoreCase))
             .OrderBy(sensor=>sensor.HardwareId=="/ram"?0:1),"Memory");
-        foreach(var disk in snapshot.Sensors.Where(sensor=>sensor.HardwareType=="Storage").GroupBy(sensor=>sensor.HardwareId))
+        result.AddRange(snapshot.Sensors.Where(sensor=>sensor.Id==DiskSpaceMetrics.UsageId));
+        foreach(var disk in snapshot.Sensors.Where(sensor=>sensor.HardwareType=="Storage" && sensor.HardwareId!=DiskSpaceMetrics.HardwareId).GroupBy(sensor=>sensor.HardwareId))
         {
             Pick(disk.Where(sensor=>sensor.Kind=="Load"),"Total Activity");
             Pick(disk.Where(sensor=>sensor.Kind=="Throughput"),"Read Rate");
@@ -61,8 +62,8 @@ public static class SensorCatalog
     {
         var selected=pinned.ToHashSet();
         IEnumerable<SensorReading> items=filter==L.T("Common metrics")?Common(snapshot):snapshot.Sensors;
-        items=items.Where(sensor=>sensor.IsValid || sensor.Status=="warming" || showUnavailable ||
-            (filter==L.T("Common metrics") && sensor.Status=="requires_admin"));
+        bool fresh=snapshot.IsFresh;
+        items=items.Where(sensor=>showUnavailable || (fresh && sensor.IsValid));
         return items.Where(sensor=>filter switch
         {
 _ when filter == L.T("Temperatures only") =>sensor.Kind=="Temperature", _ when filter == L.T("Fans only") =>sensor.Kind=="Fan", _ when filter == L.T("Usage only") =>sensor.Kind=="Load",

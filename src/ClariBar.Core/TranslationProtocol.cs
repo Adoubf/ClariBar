@@ -6,6 +6,9 @@ using System.Text.RegularExpressions;
 
 namespace ClariBar.Core;
 
+public sealed record TranslationUpdate(int Index,string Text,bool Complete);
+public sealed record TranslationProgress(TranslationDocument Document,int Index,bool Complete);
+
 public sealed record TranslationLine(string Source, PixelRect Bounds, string Target="")
 {
     public int TextHeight {get;init;}
@@ -44,6 +47,7 @@ public static class TranslationProtocol
         try{return CultureInfo.GetCultureInfo(code).EnglishName;}catch(CultureNotFoundException){return code;}
     }
     public static bool IsHunyuan(string model)=>Regex.IsMatch(model,@"(?:^|[/\s_-])(?:hy[-_.]?mt|hunyuan[-_.]?mt)",RegexOptions.IgnoreCase);
+    public static string[] TextParagraphs(string text)=>Regex.Split(text.Trim(),@"\r?\n[\t ]*\r?\n(?:[\t ]*\r?\n)*").Where(part=>!string.IsNullOrWhiteSpace(part)).ToArray();
     public static TranslationLine[] Paragraphs(IReadOnlyList<TranslationLine> lines)
     {
         var output=new List<TranslationLine>();TranslationLine? previous=null;

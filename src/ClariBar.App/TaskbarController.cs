@@ -54,6 +54,21 @@ internal sealed class TaskbarController
         try{Status=Native.ReadTaskbarStatus();}
         catch(Exception ex){Error=ex.Message;}
     }
+    internal static object CompatibilityDetails()
+    {
+        string? displayVersion=null,build=null;int? revision=null;
+        try
+        {
+            using var key=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            displayVersion=key?.GetValue("DisplayVersion") as string;build=key?.GetValue("CurrentBuildNumber") as string;revision=key?.GetValue("UBR") as int?;
+        }
+        catch(System.Security.SecurityException){}
+        catch(UnauthorizedAccessException){}
+        string? explorerVersion=null;
+        try{explorerVersion=System.Diagnostics.FileVersionInfo.GetVersionInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"explorer.exe")).FileVersion;}
+        catch(IOException){}
+        return new{displayVersion,build,revision,explorerVersion,architecture=System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),runtimeHostDetection=true};
+    }
     public static bool Needed(AppSettings settings)=>settings.TaskbarMonitorEnabled || settings.TaskbarBackgroundMode!="System" ||
         settings.TimeColorEnabled || settings.DateColorEnabled || settings.TrayColorEnabled || settings.NetworkColorEnabled ||
         settings.VolumeColorEnabled || settings.InputColorEnabled || settings.BatteryColorEnabled;
@@ -62,7 +77,7 @@ internal sealed class TaskbarController
     {
         var config=TaskbarConfig.Empty();
         config.BackgroundMode=settings.TaskbarBackgroundMode switch{"Transparent"=>1u,"Tinted"=>2u,_=>0u};
-        config.BackgroundArgb=Argb(settings.TaskbarBackgroundColor,settings.TaskbarBackgroundMode=="Transparent"?0:settings.TaskbarOpacity);
+        config.BackgroundArgb=Argb(settings.TaskbarBackgroundColor,settings.TaskbarBackgroundMode switch {"Transparent"=>0,"Tinted"=>settings.TaskbarOpacity,_=>100});
         config.Embedded=settings.TaskbarMonitorEnabled?1u:0u;
         config.Layout=settings.MonitorLayout switch{"TwoColumns"=>1u,"TwoRows"=>2u,_=>0u};
         config.ClickThrough=settings.MonitorClickThrough?1u:0u;config.FontSize=(uint)settings.MonitorFontSize;config.Width=(uint)settings.MonitorWidth;

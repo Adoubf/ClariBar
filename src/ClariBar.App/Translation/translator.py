@@ -20,5 +20,6 @@ for text in request["texts"]:
     # Split long OCR lines explicitly instead of silently truncating source tokens.
     parts = [tokens[i:i + 220] for i in range(0, len(tokens), 220)]
     results = translator.translate_batch(parts, beam_size=3, max_decoding_length=512, max_input_length=0)
-    output.append(" ".join(tokenizer.decode(result.hypotheses[0]) for result in results))
+    translated = " ".join(tokenizer.decode(result.hypotheses[0]) for result in results)
+    output.append(translated)
 print(json.dumps(output, ensure_ascii=False))

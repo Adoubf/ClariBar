@@ -220,9 +220,8 @@ public sealed partial class MainWindow
         catch(InvalidOperationException) { }
     }
 
-    private void ResponsiveSensors(Grid filters,ComboBox categories,ComboBox kinds,ComboBox device,StackPanel summary,Grid header,ListView list,DataTemplate wideTemplate)
+    private void ResponsiveSensors(Grid filters,ComboBox categories,ComboBox kinds,ComboBox device,TextBox search,Button editOrder,StackPanel summary,Grid header,ListView list,DataTemplate wideTemplate)
     {
-        for(int i=0;i<3;i++)filters.RowDefinitions.Add(new(){Height=GridLength.Auto});
         filters.RowSpacing=8;
         var compactTemplate=(DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load("""
           <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
@@ -240,19 +239,43 @@ public sealed partial class MainWindow
         int previous=-1;bool? compactBefore=null;
         Responsive(width=>
         {
-            int mode=width>=860?0:width>=560?1:width>=420?2:3;
+            int mode=width>=860?0:width>=620?1:width>=420?2:3;
             if(mode!=previous)
             {
                 previous=mode;
-                filters.ColumnDefinitions[0].Width=mode>=2?new GridLength(1,GridUnitType.Star):new GridLength(160);
-                filters.ColumnDefinitions[1].Width=mode>=2?new GridLength(1,GridUnitType.Star):new GridLength(160);
-                filters.ColumnDefinitions[2].MinWidth=0;
-                filters.ColumnDefinitions[2].Width=mode>=2?new GridLength(0):new GridLength(1,GridUnitType.Star);
-                filters.ColumnDefinitions[3].Width=mode==0?GridLength.Auto:new GridLength(0);
-                Grid.SetRow(device,mode>=2?1:0);Grid.SetColumn(device,mode>=2?0:2);Grid.SetColumnSpan(device,mode>=2?2:1);
-                Grid.SetRow(summary,mode==0?0:mode==1?1:2);Grid.SetColumn(summary,mode==0?3:0);Grid.SetColumnSpan(summary,mode==0?1:mode==1?3:2);
-                summary.Margin=mode==0?new Thickness(8,0,0,0):new Thickness(0);
-                summary.Orientation=mode==3?Orientation.Vertical:Orientation.Horizontal;
+                filters.ColumnDefinitions.Clear();filters.RowDefinitions.Clear();
+                var star=new GridLength(1,GridUnitType.Star);
+                GridLength[] widths=mode switch
+                {
+                    0=>[new(140),new(150),star,star,GridLength.Auto,GridLength.Auto],
+                    1=>[new(140),new(150),star,GridLength.Auto],
+                    2=>[star,star,GridLength.Auto],
+                    _=>[star,GridLength.Auto]
+                };
+                foreach(var column in widths)filters.ColumnDefinitions.Add(new(){Width=column});
+                for(int i=0;i<(mode==0?1:mode==1?2:mode==2?4:5);i++)filters.RowDefinitions.Add(new(){Height=GridLength.Auto});
+                void Place(FrameworkElement element,int row,int column,int span=1)
+                {Grid.SetRow(element,row);Grid.SetColumn(element,column);Grid.SetColumnSpan(element,span);}
+                if(mode==0)
+                {
+                    Place(categories,0,0);Place(kinds,0,1);Place(device,0,2);Place(search,0,3);Place(editOrder,0,4);Place(summary,0,5);
+                }
+                else if(mode==1)
+                {
+                    Place(categories,0,0);Place(kinds,0,1);Place(device,0,2,2);
+                    Place(search,1,0,2);Place(editOrder,1,2);Place(summary,1,3);
+                }
+                else if(mode==2)
+                {
+                    Place(categories,0,0);Place(kinds,0,1,2);Place(device,1,0,3);
+                    Place(search,2,0,2);Place(editOrder,2,2);Place(summary,3,0,3);
+                }
+                else
+                {
+                    Place(categories,0,0,2);Place(kinds,1,0,2);Place(device,2,0,2);
+                    Place(search,3,0);Place(editOrder,3,1);Place(summary,4,0,2);
+                }
+                editOrder.HorizontalAlignment=mode==1?HorizontalAlignment.Stretch:HorizontalAlignment.Right;
             }
             bool compact=width<660;if(compactBefore==compact)return;compactBefore=compact;
             list.ItemTemplate=compact?compactTemplate:wideTemplate;header.Children.Clear();header.ColumnDefinitions.Clear();

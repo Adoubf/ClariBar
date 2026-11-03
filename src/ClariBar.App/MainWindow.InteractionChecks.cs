@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using ClariBar.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -67,11 +68,16 @@ public sealed partial class MainWindow
         try
         {
             await AwaitSourcePixelAsync(new(224,48,32));
+            var initialCursor=new PickerCursorInfo{Size=Marshal.SizeOf<PickerCursorInfo>()};GetCursorInfo(ref initialCursor);
+            // The preceding test closes an annotation window with a custom
+            // cursor. Let the new host process its pending cursor messages.
+            await Task.Delay(80);
             var before=new PickerCursorInfo{Size=Marshal.SizeOf<PickerCursorInfo>()};GetCursorInfo(ref before);nint foreground=DesktopWindowState.Foreground,capture=GetCapture();
             var pending=picker.SelectAsync(observeOnly:true);InteractionField<DispatcherTimer>(picker,"timer").Stop();picker.RefreshAt(point);await Task.Delay(30);
             require(picker.Color==new ScreenColor(224,48,32),"The live picker samples the current visible application pixel");
             require(picker.SampleBounds.Width<=49 && picker.SampleBounds.Height<=49,"Live picking captures a small pointer neighborhood instead of freezing the desktop");
             var after=new PickerCursorInfo{Size=Marshal.SizeOf<PickerCursorInfo>()};GetCursorInfo(ref after);
+            await File.WriteAllTextAsync(Path.Combine(AppPaths.Logs,"live-picker-input-state.json"),JsonSerializer.Serialize(new{initialCursor=initialCursor.Cursor.ToInt64(),beforeCursor=before.Cursor.ToInt64(),afterCursor=after.Cursor.ToInt64(),foregroundBefore=foreground.ToInt64(),foregroundAfter=DesktopWindowState.Foreground.ToInt64(),captureBefore=capture.ToInt64(),captureAfter=GetCapture().ToInt64()},Wire.Json));
             require(DesktopWindowState.Foreground==foreground && GetCapture()==capture && before.Cursor==after.Cursor,"The color preview does not activate a window, capture the mouse or replace its cursor");
             long style=ReadPickerWindowStyle(picker.PreviewHandle,-20).ToInt64();require((style&0x08080020)==0x08080020,"The native preview is layered, does not activate and allows mouse input to pass through");
             grid.Background=ToolUi.Brush("#2050E0");await AwaitSourcePixelAsync(new(32,80,224));picker.RefreshAt(point);

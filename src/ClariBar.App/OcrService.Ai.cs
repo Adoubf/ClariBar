@@ -17,15 +17,15 @@ internal static partial class OcrService
 {
     internal static Uri ValidateEndpoint(string endpoint)=>AiOcrProtocol.ValidateUrl(endpoint);
     public static Task<string> AiAsync(PixelFrame frame,string endpoint,string model,string key,CancellationToken cancellation=default)=>AiAsync(frame,new AiOcrOptions(endpoint,model),key,cancellation);
-    public static Task<string> AiAsync(PixelFrame frame,AiOcrOptions options,string key,CancellationToken cancellation=default)=>SendAiAsync(frame,options,key,4096,cancellation);
-    internal static async Task<AiOcrConnectionTest> TestConnectionAsync(AiOcrOptions options,string key,CancellationToken cancellation=default,HttpMessageHandler? handler=null)
+    public static Task<string> AiAsync(PixelFrame frame,AiOcrOptions options,string key,CancellationToken cancellation=default,Action<string>? received=null,HttpMessageHandler? handler=null)=>SendAiAsync(frame,options,key,4096,cancellation,handler,received);
+    internal static async Task<AiOcrConnectionTest> TestConnectionAsync(AiOcrOptions options,string key,CancellationToken cancellation=default,HttpMessageHandler? handler=null,Action<string>? received=null)
     {
         byte[] pixels=new byte[560*170*4];Array.Fill(pixels,(byte)255);
         var sample=new PixelFrame(560,170,pixels).Render([
             new("Text",[new(24,18),new(25,19)],"#101010",3,"CLARIBAR OCR 2026"){FontSize=32},
             new("Text",[new(24,70),new(25,71)],"#303030",3,"Connection test / 文字识别测试"){FontSize=22}
         ]);
-        var watch=Stopwatch.StartNew();string text=await SendAiAsync(sample,options,key,2048,cancellation,handler);
+        var watch=Stopwatch.StartNew();string text=await SendAiAsync(sample,options,key,2048,cancellation,handler,received);
         string normalized=Regex.Replace(text,"[^A-Za-z0-9]","").ToUpperInvariant();
         return new(AiOcrProtocol.Resolve(options),options.Model,watch.ElapsedMilliseconds,text,normalized.Contains("CLARIBAR") && normalized.Contains("2026"));
     }
@@ -39,14 +39,15 @@ internal static partial class OcrService
         }
         return new(){AllowAutoRedirect=false,UseProxy=!direct};
     }
-    internal static async Task<string> SendAiAsync(PixelFrame frame,AiOcrOptions options,string key,int maxTokens,CancellationToken cancellation=default,HttpMessageHandler? handler=null)
+    internal static async Task<string> SendAiAsync(PixelFrame frame,AiOcrOptions options,string key,int maxTokens,CancellationToken cancellation=default,HttpMessageHandler? handler=null,Action<string>? received=null)
     {
         var specification=AiOcrProtocol.BuildRequest(options,await frame.PngAsync(),maxTokens);
-        return await SendAiRequestAsync(specification,options.TimeoutSeconds,key,cancellation,handler);
+        if(received is not null)specification=AiTextStream.Configure(specification,true);
+        return await SendAiRequestAsync(specification,options.TimeoutSeconds,key,cancellation,handler,received);
     }
     // OCR and text translation share endpoint resolution, authentication, private
     // network routing, TLS validation, cancellation and bounded response handling.
-    internal static async Task<string> SendAiRequestAsync(AiOcrRequest specification,int timeoutSeconds,string key,CancellationToken cancellation=default,HttpMessageHandler? handler=null)
+    internal static async Task<string> SendAiRequestAsync(AiOcrRequest specification,int timeoutSeconds,string key,CancellationToken cancellation=default,HttpMessageHandler? handler=null,Action<string>? received=null,bool allowStreamFallback=true)
     {
         if(key.Contains('\r') || key.Contains('\n'))throw new InvalidOperationException(L.T("The API key contains an invalid line break."));
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds,5,1800)));
@@ -55,6 +56,7 @@ internal static partial class OcrService
             var transport=handler??await HandlerAsync(specification.Target.Endpoint,timeout.Token);
             using var client=new HttpClient(transport,disposeHandler:handler is null){Timeout=Timeout.InfiniteTimeSpan};
             using var request=new HttpRequestMessage(HttpMethod.Post,specification.Target.Endpoint);
+            if(received is not null)request.Headers.Accept.Add(new("text/event-stream"));
             request.Headers.Accept.Add(new("application/json"));
             if(specification.Target.ApiType==AiOcrProtocol.Anthropic)
             {
@@ -65,12 +67,18 @@ internal static partial class OcrService
             // Each caller supplies only the selected image or recognized text.
             request.Content=new StringContent(specification.Payload,Encoding.UTF8,"application/json");
             using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,timeout.Token);
+            if(response.IsSuccessStatusCode && string.Equals(response.Content.Headers.ContentType?.MediaType,"text/event-stream",StringComparison.OrdinalIgnoreCase))
+                return await AiTextStream.ReadAsync(await response.Content.ReadAsStreamAsync(timeout.Token),specification.Target.ApiType,received??(_=>{}),timeout.Token);
             await using var stream=await response.Content.ReadAsStreamAsync(timeout.Token);using var buffer=new MemoryStream();byte[] block=new byte[8192];
             int count;while((count=await stream.ReadAsync(block,timeout.Token))>0)
             {if(buffer.Length+count>2*1024*1024)throw new IOException(L.T("The AI OCR response is too large."));buffer.Write(block,0,count);}
             string body=Encoding.UTF8.GetString(buffer.ToArray());
             if(!response.IsSuccessStatusCode)
             {
+                bool unsupported=(int)response.StatusCode is 406 or 501 || (specification.Target.ApiType==AiOcrProtocol.Gemini && (int)response.StatusCode is 404 or 405) ||
+                    ((int)response.StatusCode is 400 or 422 && body.Contains("stream",StringComparison.OrdinalIgnoreCase));
+                if(received is not null && allowStreamFallback && unsupported)
+                    return await SendAiRequestAsync(AiTextStream.Configure(specification,false),timeoutSeconds,key,timeout.Token,handler,received,allowStreamFallback:false);
                 string detail="";try{using var json=JsonDocument.Parse(body);detail=AiOcrProtocol.ErrorMessage(json.RootElement);}catch(JsonException){}
                 if(key.Length>0)detail=detail.Replace(key,"[redacted]",StringComparison.Ordinal);
                 if(detail.Length>500)detail=detail[..500]+"…";

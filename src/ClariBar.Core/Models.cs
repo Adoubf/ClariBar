@@ -9,6 +9,7 @@ public sealed record SensorReading(string Id, string HardwareId, string Hardware
 {
     [JsonIgnore] public bool IsValid => Status == "valid" && Value.HasValue && float.IsFinite(Value.Value);
     [JsonIgnore] public string DisplayName => SensorLabels.Name(this);
+    [JsonIgnore] public string DisplayHardware => HardwareId == DiskSpaceMetrics.HardwareId ? L.T("All local fixed disks") : Hardware;
     [JsonIgnore] public string DisplayValue => IsValid
         ? $"{Value!.Value:0.##}{(Unit.Length > 0 ? " " + Unit : "")}" : "—";
     [JsonIgnore] public string StatusText => Status switch

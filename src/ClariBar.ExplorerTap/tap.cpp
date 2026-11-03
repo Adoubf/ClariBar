@@ -27,6 +27,7 @@
 #include <winrt/Windows.UI.Text.h>
 #include "../ClariBar.Native/explorer_protocol.h"
 #include "../ClariBar.Native/text_ink.h"
+#include "taskbar_host.h"
 
 namespace wx=winrt::Windows::UI::Xaml;
 namespace wc=winrt::Windows::UI::Xaml::Controls;
@@ -139,64 +140,20 @@ struct Patch {
         }}catch(...){try{if(auto target=object.get())target.SetValue(property,originalEffective);}catch(...){}}
     }
 };
-struct LayoutValue {winrt::weak_ref<wx::FrameworkElement> object;wf::IInspectable column{nullptr},span{nullptr};};
-struct Embedded {
-    wc::Grid parent{nullptr},panel{nullptr};wc::ColumnDefinition column{nullptr};
-    wc::Panel host{nullptr};
+struct Embedded:claribar::taskbar::HostSlot {
     winrt::weak_ref<wx::DependencyObject> tray;
     winrt::weak_ref<wx::FrameworkElement> background;
-    std::vector<LayoutValue> originals;
     std::vector<wc::TextBlock> texts;
     std::vector<wc::Canvas> cells;
     uint32_t layout=UINT32_MAX,itemCount=UINT32_MAX;
     void Remove() noexcept {
-        try {
-            if(host && panel) {uint32_t index{};if(host.Children().IndexOf(panel,index))host.Children().RemoveAt(index);}
-            if(parent && column){uint32_t index{};if(parent.ColumnDefinitions().IndexOf(column,index))parent.ColumnDefinitions().RemoveAt(index);}
-            for(auto& entry:originals)if(auto item=entry.object.get()) {
-                if(entry.column==wx::DependencyProperty::UnsetValue())item.ClearValue(wc::Grid::ColumnProperty());else item.SetValue(wc::Grid::ColumnProperty(),entry.column);
-                if(entry.span==wx::DependencyProperty::UnsetValue())item.ClearValue(wc::Grid::ColumnSpanProperty());else item.SetValue(wc::Grid::ColumnSpanProperty(),entry.span);
-            }
-        }catch(...){}
-        texts.clear();cells.clear();originals.clear();panel=nullptr;column=nullptr;parent=nullptr;host=nullptr;tray=nullptr;background=nullptr;layout=itemCount=UINT32_MAX;
+        HostSlot::Remove();texts.clear();cells.clear();tray=nullptr;background=nullptr;layout=itemCount=UINT32_MAX;
     }
     bool Insert(wx::DependencyObject target) {
         tray=winrt::make_weak(target);
-        wc::StackPanel stack{nullptr};
-        Visit(target,[&](wx::DependencyObject item,int){if(Name(item)==L"SystemTrayFrameGrid")stack=item.try_as<wc::StackPanel>();});
-        if(stack && stack.Orientation()==wc::Orientation::Horizontal) {
-            host=stack;panel=wc::Grid();panel.Name(L"ClariBarEmbeddedMonitor");
-            panel.Margin({4,0,6,0});panel.VerticalAlignment(wx::VerticalAlignment::Center);panel.Background(Brush(0));
-            stack.Children().InsertAt(0,panel);return true;
-        }
-        wx::FrameworkElement anchor=target.try_as<wx::FrameworkElement>();
-        for(int step=0;anchor && step<20;step++) {
-            auto candidate=Parent(anchor);if(!candidate)break;
-            auto grid=candidate.try_as<wc::Grid>();
-            if(grid && grid.ColumnDefinitions().Size()>1 && IsTaskbar(grid)) {
-                int index=wc::Grid::GetColumn(anchor);
-                if(index>=0 && index<static_cast<int>(grid.ColumnDefinitions().Size())) {
-                    parent=grid;host=grid;column=wc::ColumnDefinition();column.Width({0,wx::GridUnitType::Auto});
-                    for(auto ui:grid.Children()) {
-                        auto child=ui.try_as<wx::FrameworkElement>();if(!child)continue;
-                        LayoutValue old{winrt::make_weak(child),child.ReadLocalValue(wc::Grid::ColumnProperty()),child.ReadLocalValue(wc::Grid::ColumnSpanProperty())};
-                        originals.push_back(old);
-                    }
-                    grid.ColumnDefinitions().InsertAt(index,column);
-                    for(auto& entry:originals)if(auto item=entry.object.get()) {
-                        int c=wc::Grid::GetColumn(item),span=wc::Grid::GetColumnSpan(item);
-                        if(c>=index)wc::Grid::SetColumn(item,c+1);
-                        else if(c+span>index)wc::Grid::SetColumnSpan(item,span+1);
-                    }
-                    panel=wc::Grid();panel.Name(L"ClariBarEmbeddedMonitor");panel.Margin({4,0,6,0});
-                    panel.VerticalAlignment(wx::VerticalAlignment::Center);
-                    panel.Background(Brush(0));wc::Grid::SetColumn(panel,index);grid.Children().Append(panel);
-                    return true;
-                }
-            }
-            anchor=candidate.try_as<wx::FrameworkElement>();
-        }
-        return false;
+        wc::Grid content;content.Name(L"ClariBarEmbeddedMonitor");content.Margin({4,0,6,0});
+        content.VerticalAlignment(wx::VerticalAlignment::Center);content.Background(Brush(0));
+        return HostSlot::Insert(target,content);
     }
     wf::Rect VisibleArea() {
         wf::Rect area{0,0,static_cast<float>(host.ActualWidth()),static_cast<float>(host.ActualHeight()>8?host.ActualHeight():48)};
@@ -270,7 +227,7 @@ struct Embedded {
         double up=rows>1?std::min(2.,std::max(0.,padding-2)):0;
         double fullHeight=host.ActualHeight()>8?host.ActualHeight():available;
         panel.Height(fullHeight);panel.Padding({0,area.Y+padding-up,0,std::max(0.,fullHeight-area.Y-area.Height)+padding+up});panel.RowSpacing(gap);
-        panel.Tag(winrt::box_value(winrt::hstring(L"areaTop="+std::to_wstring(area.Y)+L" areaHeight="+std::to_wstring(area.Height)+L" up="+std::to_wstring(up)+L" gap="+std::to_wstring(gap))));
+        panel.Tag(winrt::box_value(winrt::hstring(L"host="+method+L" areaTop="+std::to_wstring(area.Y)+L" areaHeight="+std::to_wstring(area.Height)+L" up="+std::to_wstring(up)+L" gap="+std::to_wstring(gap))));
         for(uint32_t i=0;i<rows;i++)panel.RowDefinitions().GetAt(i).Height({heights[i],wx::GridUnitType::Pixel});
         double rootWidth=1280;
         if(auto root=panel.XamlRoot())rootWidth=root.Size().Width;
@@ -407,7 +364,7 @@ struct ThreadState : std::enable_shared_from_this<ThreadState> {
                 });
             }
             if(config.embedded) {
-                for(auto it=embedded.begin();it!=embedded.end();){if(!(*it)->tray.get() || !(*it)->panel.XamlRoot()){(*it)->Remove();it=embedded.erase(it);}else ++it;}
+                for(auto it=embedded.begin();it!=embedded.end();){if(!(*it)->tray.get() || !(*it)->Attached() || !(*it)->panel.XamlRoot()){(*it)->Remove();it=embedded.erase(it);}else ++it;}
                 for(auto tray:trayRoots) {
                     auto found=std::find_if(embedded.begin(),embedded.end(),[&](auto& entry){return entry->tray.get()==tray && entry->host && entry->panel && wm::VisualTreeHelper::GetParent(entry->panel)==entry->host;});
                     if(found==embedded.end()) {auto panel=std::make_unique<Embedded>();if(panel->Insert(tray))embedded.push_back(std::move(panel));}

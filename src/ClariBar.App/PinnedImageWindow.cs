@@ -240,16 +240,19 @@ internal sealed class PinnedImageWindow:Window
 
 internal sealed class TransparentToolBackdrop:SystemBackdrop
 {
-    private Windows.UI.Composition.Compositor? compositor;
+    // A desktop composition channel belongs to the UI thread, not an individual
+    // popup. Tearing it down while XAML is releasing a window races its callbacks.
+    [ThreadStatic]private static Windows.UI.Composition.Compositor? compositor;
+    private Windows.UI.Composition.CompositionBrush? brush;
     private nint window;
     [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]private static extern int CB_EnableWindowAlpha(nint window);
     [DllImport("ClariBar.Native.dll",CallingConvention=CallingConvention.StdCall)]private static extern void CB_DisableWindowAlpha(nint window);
     protected override void OnTargetConnected(Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop target,XamlRoot xamlRoot)
     {
         window=(nint)xamlRoot.ContentIslandEnvironment.AppWindowId.Value;CB_EnableWindowAlpha(window);
-        compositor=new Windows.UI.Composition.Compositor();target.SystemBackdrop=compositor.CreateColorBrush(Microsoft.UI.Colors.Transparent);
+        compositor??=new Windows.UI.Composition.Compositor();brush=compositor.CreateColorBrush(Microsoft.UI.Colors.Transparent);target.SystemBackdrop=brush;
         base.OnTargetConnected(target,xamlRoot);
     }
     protected override void OnTargetDisconnected(Microsoft.UI.Composition.ICompositionSupportsSystemBackdrop target)
-    {CB_DisableWindowAlpha(window);var brush=target.SystemBackdrop;target.SystemBackdrop=null;brush?.Dispose();compositor?.Dispose();compositor=null;base.OnTargetDisconnected(target);}
+    {CB_DisableWindowAlpha(window);target.SystemBackdrop=null;brush?.Dispose();brush=null;window=0;base.OnTargetDisconnected(target);}
 }

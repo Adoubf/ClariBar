@@ -19,8 +19,9 @@ internal static class SettingsIcons
     private const string Fan="M10,8 A2,2 0 1 1 9.99,8Z M9,7 C4,6 3,2 7,1 C11,0 14,1 12,7Z M13,9 C16,5 20,6 20,10 C20,14 17,16 13,12Z M9,13 C10,18 6,20 3,18 C0,15 2,12 7,11Z";
     private static readonly Dictionary<string,string> Glyphs=new()
     {
-        ["Screenshot"]="\uE722",["Capture preferences"]="\uE722",["Screen color picker"]="\uEF3C",["Color editor"]="\uE790",
+        ["Pinned metric order"]="\uE8CB",["Screenshot"]="\uE722",["Capture preferences"]="\uE722",["Screen color picker"]="\uEF3C",["Color editor"]="\uE790",
         ["Screenshot translation"]="\uE8F2",["Translation engine"]="\uE774",["Translation display"]="\uE7F4",["Source language"]="\uE8C1",["Target language"]="\uE8C8",["Optional offline models"]="\uE896",
+        ["Translate on copy"]="\uE8C8",
         ["Pin clipboard image"]="\uE718",["Pinned image preferences"]="\uE718",["Show / hide all"]="\uE890",["Mouse click-through"]="\uE962",["Click-through"]="\uE962",
         ["Delayed capture"]="\uE917",["Screenshot folder"]="\uE8B7",["Saved images"]="\uE8B9",["Local OCR language"]="\uE774",
         ["Snipaste shortcuts"]="\uE765",["Enable global shortcuts"]="\uE765",["Monitor window"]="\uE7F4",["Show a floating monitor"]="\uE7F4",

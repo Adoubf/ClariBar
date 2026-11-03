@@ -26,6 +26,16 @@ internal sealed partial class CaptureOverlay:Window
     private List<DetectedWindow> candidates;
     private readonly bool eyedropper,ocrMode;
     private readonly TaskCompletionSource<CaptureSelection?> completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<bool> firstPresented=new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private CaptureTransition? transition;
+    private readonly DispatcherTimer pointerTimer=new(){Interval=TimeSpan.FromMilliseconds(16)};
+    private readonly DispatcherTimer startupWatchdog=new(){Interval=TimeSpan.FromSeconds(2)};
+    private bool pointerPending,presentationStarted;
+    private int renderedFrames;
+    internal Task<bool> FirstPresented=>firstPresented.Task;
+    internal int SourceCommits {get;private set;}
+    internal int PreviewUpdates {get;private set;}
+    internal bool PresentationFallback {get;private set;}
     private sealed class CrosshairGrid:Grid {public CrosshairGrid()=>ProtectedCursor=InputSystemCursor.Create(InputSystemCursorShape.Cross);}
     private readonly Grid root=new CrosshairGrid();
     private readonly ContentControl focus=new(){IsTabStop=true,UseSystemFocusVisuals=false,KeyboardAcceleratorPlacementMode=KeyboardAcceleratorPlacementMode.Hidden};
@@ -71,7 +81,9 @@ internal sealed partial class CaptureOverlay:Window
         Canvas.SetLeft(info,20);Canvas.SetTop(info,20);
         focus.Content=root;Content=focus;
         root.PointerPressed+=Pressed;root.PointerMoved+=Moved;root.PointerReleased+=Released;
-        root.PointerCaptureLost+=(_,_)=>{dragging=false;moving=false;};
+        root.PointerCaptureLost+=(_,_)=>{bool active=dragging;dragging=moving=false;if(active && !completed && area is {} box)SetArea(box);};
+        pointerTimer.Tick+=async(_,_)=>{if(!pointerPending || completed){pointerTimer.Stop();return;}pointerPending=false;await ProcessPointerAsync();};
+        startupWatchdog.Tick+=(_,_)=>{startupWatchdog.Stop();if(!presentationStarted)PresentationFallback=true;_=PresentAsync();};
         root.DoubleTapped+=async(_,e)=>{if(!eyedropper && area is not null && surface?.IsEditing!=true){e.Handled=true;await OutputAsync("Copy");}};
         focus.KeyDown+=KeyDown;focus.KeyUp+=(_,e)=>
         {
@@ -84,7 +96,7 @@ internal sealed partial class CaptureOverlay:Window
             if(e.Key==VirtualKey.Menu)UpdateInfo(last);
         };
         root.SizeChanged+=(_,_)=>DrawSelection();
-        Closed+=(_,_)=>{completed=true;capturedCursor.Dispose();completion.TrySetResult(null);};
+        Closed+=(_,_)=>{completed=true;pointerTimer.Stop();startupWatchdog.Stop();CompositionTarget.Rendered-=Presented;transition?.Dispose();transition=null;firstPresented.TrySetResult(false);capturedCursor.Dispose();completion.TrySetResult(null);};
         Activated+=async(_,e)=>
         {
             if(e.WindowActivationState!=WindowActivationState.Deactivated || !loaded || completed || exporting || !tools.Settings.CaptureCancelOnDeactivate)return;
@@ -92,40 +104,64 @@ internal sealed partial class CaptureOverlay:Window
             var foreground=DesktopWindowState.Foreground;DesktopWindowState.Process(foreground,out uint pid);
             if(pid!=Environment.ProcessId && !VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot).Any(x=>x.IsOpen))Finish(null);
         };
-        if(AppWindow.Presenter is OverlappedPresenter presenter){presenter.SetBorderAndTitleBar(false,false);presenter.IsAlwaysOnTop=true;presenter.IsResizable=false;presenter.IsMaximizable=false;presenter.IsMinimizable=false;}
+        CaptureTransition.Prepare(this);
+        if(AppWindow.Presenter is OverlappedPresenter presenter){presenter.IsMaximizable=false;presenter.IsMinimizable=false;}
         AppWindow.MoveAndResize(new RectInt32(desktop.X,desktop.Y,desktop.Width,desktop.Height));
         if(preset is {} selected)SetArea(selected.Intersect(frame.Bounds),false);
     }
-    public Task<CaptureSelection?> SelectAsync()
+    public Task<CaptureSelection?> SelectAsync(CaptureTransition? captureTransition=null)
     {
+        transition=captureTransition;CompositionTarget.Rendered+=Presented;startupWatchdog.Start();
         root.Loaded+=(_,_)=>
         {
             AppWindow.MoveAndResize(new RectInt32(windowBounds.X,windowBounds.Y,windowBounds.Width,windowBounds.Height));
             DesktopCapture.GetCursorPos(out var cursor);
             last=Pixel(new((cursor.X-windowBounds.X)*root.ActualWidth/Math.Max(1,windowBounds.Width),(cursor.Y-windowBounds.Y)*root.ActualHeight/Math.Max(1,windowBounds.Height)));
             focus.Focus(FocusState.Programmatic);loaded=true;DrawSelection();
+            transition?.Raise();
         };
-        Activate();return completion.Task;
+        Reactivate();return completion.Task;
+    }
+    internal void Reactivate(){if(completed)return;Activate();transition?.Raise();}
+    private void Presented(object? sender,RenderedEventArgs args)
+    {if(loaded && root.ActualWidth>0 && root.ActualHeight>0){if(++renderedFrames>=2)_=PresentAsync();else root.InvalidateArrange();}}
+    private async Task PresentAsync()
+    {
+        if(presentationStarted || completed)return;presentationStarted=true;CompositionTarget.Rendered-=Presented;startupWatchdog.Stop();
+        try
+        {
+            // Rendered is global to the UI thread. Flush this window's own image
+            // resources before handing over from the native desktop cover.
+            var ready=new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();await ready.RenderAsync(root,1,1);
+            await Task.Run(()=>{DesktopCapture.DwmFlush();DesktopCapture.DwmFlush();});
+            if(completed)return;transition?.Dispose();transition=null;firstPresented.TrySetResult(true);
+        }
+        catch(Exception ex){if(completed)return;firstPresented.TrySetException(ex);Finish(null);}
     }
     private Point Pixel(Point p)=>new(Math.Clamp(p.X*ScaleX,0,frame.Width-1),Math.Clamp(p.Y*ScaleY,0,frame.Height-1));
     private void SetArea(PixelRect selected,bool preserve=true,CaptureMark[]? marks=null)
     {
         selected=selected.Intersect(frame.Bounds);if(selected.IsEmpty)return;area=selected;hoverArea=null;selection.Tag=null;
+        if(dragging || handleDrag)
+        {PreviewUpdates++;if(surface is not null)surface.Visibility=Visibility.Collapsed;if(toolbar is not null)toolbar.Visibility=Visibility.Collapsed;DrawSelection();return;}
+        SourceCommits++;
         if(surface is null || !preserve)
         {
             if(surface is not null)adorners.Children.Remove(surface);if(toolbar is not null)adorners.Children.Remove(toolbar);
-            var document=new AnnotationDocument(VisibleFrame.Crop(selected));if(marks is not null)document.Marks.AddRange(marks);
+            var document=new AnnotationDocument(selected==VisibleFrame.Bounds?VisibleFrame:VisibleFrame.Crop(selected));if(marks is not null)document.Marks.AddRange(marks);
             surface=new(document);surface.ToolChanged=()=>{focus.Focus(FocusState.Programmatic);DrawSelection();};
             adorners.Children.Insert(4,surface);
             toolbar=new(surface,OutputAsync);adorners.Children.Add(toolbar);
         }
-        else surface.ReplaceSource(VisibleFrame.Crop(selected));
+        else surface.ReplaceSource(selected==VisibleFrame.Bounds?VisibleFrame:VisibleFrame.Crop(selected));
+        surface.Visibility=Visibility.Visible;
         DrawSelection();
     }
     private async void Pressed(object sender,PointerRoutedEventArgs e)
     {
         if(exporting || completed || IsOnToolbar(e.OriginalSource as DependencyObject) || e.OriginalSource is Thumb)return;
         var current=e.GetCurrentPoint(root);last=Pixel(current.Position);
+        pointerPending=false;++hoverVersion;
         if(eyedropper){PickerPressed(e);return;}
         if(current.Properties.IsRightButtonPressed)
         {
@@ -152,10 +188,14 @@ internal sealed partial class CaptureOverlay:Window
         if(region.IsEmpty)return false;
         surface.Document.Add(ink.Mark([new(region.X-selected.X,region.Y-selected.Y),new(region.Right-selected.X,region.Bottom-selected.Y)]));return true;
     }
-    private async void Moved(object sender,PointerRoutedEventArgs e)
+    private void Moved(object sender,PointerRoutedEventArgs e)
     {
         if(completed || exporting || IsOnToolbar(e.OriginalSource as DependencyObject))return;
-        last=Pixel(e.GetCurrentPoint(root).Position);
+        last=Pixel(e.GetCurrentPoint(root).Position);pointerPending=true;if(!pointerTimer.IsEnabled)pointerTimer.Start();
+    }
+    private async Task ProcessPointerAsync()
+    {
+        if(completed || exporting)return;
         if(!eyedropper)
         {
             if(dragging)
@@ -163,6 +203,7 @@ internal sealed partial class CaptureOverlay:Window
                 int dx=(int)(last.X-start.X),dy=(int)(last.Y-start.Y);
                 if(moving || spaceDown && !beforeMove.IsEmpty)SetArea(CaptureGeometry.Move(beforeMove,dx,dy,frame.Bounds));
                 else if(Math.Abs(dx)+Math.Abs(dy)>3)SetArea(PixelRect.Between((int)start.X,(int)start.Y,(int)last.X,(int)last.Y));
+                return;
             }
             else if(area is null)
             {
@@ -171,13 +212,16 @@ internal sealed partial class CaptureOverlay:Window
                 if(detectElements && window is not null)
                 {var element=await detector.AtAsync(window,(int)last.X+desktop.X,(int)last.Y+desktop.Y,desktop);if(completed || request!=hoverVersion || dragging || area is not null)return;if(element is not null)candidate=element;}
                 SetHoverArea(candidate);
+                return;
             }
         }
         UpdateInfo(last);
     }
     private async void Released(object sender,PointerRoutedEventArgs e)
     {
-        if(!dragging)return;dragging=false;bool wasMoving=moving;moving=false;last=Pixel(e.GetCurrentPoint(root).Position);root.ReleasePointerCaptures();
+        if(!dragging)return;bool wasMoving=moving;last=Pixel(e.GetCurrentPoint(root).Position);pointerPending=false;
+        if(!eyedropper){int dx=(int)(last.X-start.X),dy=(int)(last.Y-start.Y);if(moving || spaceDown && !beforeMove.IsEmpty)SetArea(CaptureGeometry.Move(beforeMove,dx,dy,frame.Bounds));else if(Math.Abs(dx)+Math.Abs(dy)>3)SetArea(PixelRect.Between((int)start.X,(int)start.Y,(int)last.X,(int)last.Y));}
+        dragging=moving=false;root.ReleasePointerCaptures();
         if(eyedropper){CompletePicker(pickerAction);e.Handled=true;return;}
         if(!wasMoving && Math.Abs(start.X-last.X)+Math.Abs(start.Y-last.Y)<=4)
         {
@@ -185,6 +229,7 @@ internal sealed partial class CaptureOverlay:Window
             selected??=candidates.FirstOrDefault(w=>w.Bounds.Contains((int)last.X+desktop.X,(int)last.Y+desktop.Y))?.Bounds;
             if(selected is {} window)SetArea(window with {X=window.X-desktop.X,Y=window.Y-desktop.Y},false);
         }
+        else if(area is {} committed)SetArea(committed);
         DrawSelection();if(ocrMode && area is not null)await OutputAsync("OCR");e.Handled=true;
     }
     private void ClearArea()
@@ -200,13 +245,13 @@ internal sealed partial class CaptureOverlay:Window
     private void DrawSelection()
     {
         double width=root.ActualWidth,height=root.ActualHeight;
-        if((area??hoverArea) is not {} a || a.IsEmpty){selectionHalo.Visibility=selection.Visibility=Visibility.Collapsed;SetBox(shade[0],0,0,width,height);foreach(var s in shade.Skip(1))SetBox(s,0,0,0,0);return;}
+        if((area??hoverArea) is not {} a || a.IsEmpty){selectionHalo.Visibility=selection.Visibility=Visibility.Collapsed;SetBox(shade[0],0,0,width,height);foreach(var s in shade.Skip(1))SetBox(s,0,0,0,0);UpdateInfo(last);return;}
         double x=a.X/ScaleX,y=a.Y/ScaleY,w=a.Width/ScaleX,h=a.Height/ScaleY;
         selectionHalo.Visibility=selection.Visibility=Visibility.Visible;SetBox(selectionHalo,x,y,w,h);SetBox(selection,x,y,w,h);
         SetBox(shade[0],0,0,width,y);SetBox(shade[1],0,y+h,width,height-y-h);SetBox(shade[2],0,y,x,h);SetBox(shade[3],x+w,y,width-x-w,h);
         if(area is null){anchors.Children.Clear();UpdateInfo(last);return;}
         if(surface is not null){Canvas.SetLeft(surface,x);Canvas.SetTop(surface,y);surface.RenderTransform=new ScaleTransform {ScaleX=1/ScaleX,ScaleY=1/ScaleY};}
-        if(toolbar is not null)
+        if(toolbar is not null && !dragging && !handleDrag)
         {
             toolbar.Visibility=toolbarShown?Visibility.Visible:Visibility.Collapsed;
             var point=new PointInt32(windowBounds.X+(int)(a.X*windowBounds.Width/(double)frame.Width),windowBounds.Y+(int)(a.Bottom*windowBounds.Height/(double)frame.Height));
@@ -219,19 +264,21 @@ internal sealed partial class CaptureOverlay:Window
             ty=Math.Clamp(ty,Math.Max(8,top+8),Math.Max(8,bottom-toolbar.DesiredSize.Height-8));
             Canvas.SetLeft(toolbar,tx);Canvas.SetTop(toolbar,ty);
         }
-        if(!handleDrag)
+        if(!dragging)
         {
-            anchors.Children.Clear();
-            if(surface is not null)foreach(var (anchor,xx,yy) in new[]{("NW",x,y),("N",x+w/2,y),("NE",x+w,y),("W",x,y+h/2),("E",x+w,y+h/2),("SW",x,y+h),("S",x+w/2,y+h),("SE",x+w,y+h)})
+            if(!handleDrag && surface is not null && anchors.Children.Count==0)foreach(var anchor in new[]{"NW","N","NE","W","E","SW","S","SE"})
             {
                 var thumb=new ResizeThumb(anchor) {Width=12,Height=12,Background=ToolUi.Brush("#58CBE3"),RequestedTheme=ElementTheme.Dark,
-                    HandleTemplate=(ControlTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Thumb'><Border Background='#132631' BorderBrush='#132631' BorderThickness='1' CornerRadius='7'><Border Background='{TemplateBinding Background}' BorderBrush='White' BorderThickness='1.5' CornerRadius='6'/></Border></ControlTemplate>")};Canvas.SetLeft(thumb,xx-6);Canvas.SetTop(thumb,yy-6);anchors.Children.Add(thumb);
+                    HandleTemplate=(ControlTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Thumb'><Border Background='#132631' BorderBrush='#132631' BorderThickness='1' CornerRadius='7'><Border Background='{TemplateBinding Background}' BorderBrush='White' BorderThickness='1.5' CornerRadius='6'/></Border></ControlTemplate>")};anchors.Children.Add(thumb);
                 PixelRect original=default;double dx=0,dy=0;
                 thumb.DragStarted+=(_,_)=>{handleDrag=true;original=area??default;dx=dy=0;};
                 thumb.DragDelta+=(_,e)=>{dx+=e.HorizontalChange*ScaleX;dy+=e.VerticalChange*ScaleY;SetArea(CaptureGeometry.Resize(original,anchor,(int)dx,(int)dy,frame.Bounds));};
-                thumb.DragCompleted+=(_,_)=>{handleDrag=false;DrawSelection();};
+                thumb.DragCompleted+=(_,_)=>{handleDrag=false;if(area is {} box)SetArea(box);else DrawSelection();};
             }
+            foreach(var child in anchors.Children.OfType<ResizeThumb>())
+            {double xx=child.Anchor.Contains('W')?x:child.Anchor.Contains('E')?x+w:x+w/2,yy=child.Anchor.Contains('N')?y:child.Anchor.Contains('S')?y+h:y+h/2;Canvas.SetLeft(child,xx-6);Canvas.SetTop(child,yy-6);}
         }
+        anchors.Visibility=dragging?Visibility.Collapsed:Visibility.Visible;
         UpdateInfo(last);
     }
     private void UpdateInfo(Point p)

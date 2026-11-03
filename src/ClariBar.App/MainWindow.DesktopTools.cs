@@ -57,7 +57,6 @@ public sealed partial class MainWindow
     }
     private void BuildDesktopTools()
     {
-        Notice(L.T("Capture, pick and pin"), L.T("Select a window automatically or drag any region. Captures stay on this computer. Use the tray menu or global shortcuts while settings are hidden."));
         Row(L.T("Screenshot"), L.T("Adjust and annotate directly in the selected region, then copy, save, pin or extract text."), CaptureModeButton(), "\uE722");
         Row(L.T("Screen color picker"), L.T("Floating color preview, wheel magnifier, HEX / RGB / HSL / HSV and editable color history."), Button(L.T("Pick from screen"), () => _ = desktopTools.BeginAsync(color: true)), "\uEF3C");
         Row(L.T("Color editor"), L.T("Edit and copy colors, or reuse a recent color. The same editor is available for taskbar and monitoring colors."), Button(L.T("Open editor"), () => desktopTools.OpenColor()), "\uE790");
@@ -67,8 +66,6 @@ public sealed partial class MainWindow
         Row(L.T("Pinned images & groups"),L.T("Restore closed images, switch groups, open image files and manage visibility."),Button(L.T("Manage images"),()=>_=desktopTools.OpenPinsAsync()),"\uE8B7");
         BuildCapturePreferences();
         Heading(L.T("Global shortcuts"));
-        Row(L.T("Snipaste shortcuts"),L.T("F1: screenshot · F3: paste · Shift+F3: show or hide all. Close Snipaste or disable its global hotkeys before using the same shortcuts in ClariBar."),
-            Button(L.T("Use Snipaste shortcuts"),()=>{DesktopShortcuts.ApplySnipaste(settings);Save();ConfigureToolHotkeys();RenderPage();}),"\uE765");
         Row(L.T("Enable global shortcuts"), L.T("Shortcuts work while ClariBar is in the system tray. Change a shortcut if another application already uses it."), Toggle(settings.ToolHotkeysEnabled, value => { settings.ToolHotkeysEnabled = value; Save(); ConfigureToolHotkeys(); RenderPage(); }), "\uE765");
         void HotkeyRow(string name, string value, Action<string> changed)
         {

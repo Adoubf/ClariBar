@@ -9,10 +9,12 @@ public partial class App : Application
     public App()
     {
         AppPaths.Initialize();
+        AppDiagnostics.Initialize();
         AppLocalization.Initialize();
         InitializeComponent();
         UnhandledException += (_, e) =>
         {
+            AppDiagnostics.Error("xaml-unhandled",e.Exception);
             try
             {
                 Directory.CreateDirectory(AppPaths.Logs);

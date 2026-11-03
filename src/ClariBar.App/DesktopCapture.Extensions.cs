@@ -37,7 +37,7 @@ internal static partial class DesktopCapture
             DrawIconEx(surface.Dc,cursor.X-desktop.X-(int)info.XHotspot,cursor.Y-desktop.Y-(int)info.YHotspot,cursor.Handle,0,0,0,0,3);
             if(info.Mask!=0)DeleteObject(info.Mask);if(info.Color!=0)DeleteObject(info.Color);
         }
-        byte[] pixels=new byte[frame.Pixels.Length];Marshal.Copy(surface.Bits,pixels,0,pixels.Length);for(int i=3;i<pixels.Length;i+=4)pixels[i]=255;
+        GdiFlush();byte[] pixels=new byte[frame.Pixels.Length];Marshal.Copy(surface.Bits,pixels,0,pixels.Length);for(int i=3;i<pixels.Length;i+=4)pixels[i]=255;
         return new(frame.Width,frame.Height,pixels);
     }
     public static List<PixelRect> ChildRegions(nint parent,PixelRect desktop)

@@ -33,7 +33,7 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, SensorRow> rowIndex = [];
     private string page = "overview", query = "", category = L.T("All categories"), sensorKind = L.T("Common metrics"), deviceId = "";
     private string connection = L.T("Connecting to sensors…");
-    private bool nativeReady, quitting, reloading, synchronizingSelection,showUnavailable;
+    private bool nativeReady, quitting, reloading, synchronizingSelection;
     private BrokerPhase connectionPhase=BrokerPhase.Idle;
     private string? accessFallbackNotice;
     private readonly List<BrokerPhase> connectionTransitions=[];
@@ -42,7 +42,6 @@ public sealed partial class MainWindow : Window
     private ProgressRing? hardwareProgress;
     private Grid? sensorTitleRow,sensorFilters;
     private StackPanel? sensorFilterSummary;
-    private CheckBox? unavailableFilter;
     private object? sensorControlsVerification;
     private DateTimeOffset lastHealthExport=DateTimeOffset.MinValue;
     private readonly bool smokeTest;
@@ -50,8 +49,11 @@ public sealed partial class MainWindow : Window
     private ListView? sensorList;
     private TextBlock? statusText, countText, cpuValue, gpuValue, temperatureValue, fanValue;
     private TextBlock? emptySensors;
-    private InfoBar? accessInfo,networkInfo;
-    private InfoBar? taskbarInfo;
+    private Button? taskbarConnectionButton,taskbarDiagnosticsButton;
+    private TextBlock? taskbarConnectionMessage;
+    private RadioButton? taskbarStyleOption,taskbarOpacityOption;
+    private ComboBox? taskbarStyleSelector;
+    private Slider? taskbarOpacitySlider;
     private readonly TaskbarController taskbar = new();
     private ComboBox? deviceFilter;
     private ComboBox? renameSelector;
@@ -71,24 +73,26 @@ public sealed partial class MainWindow : Window
         if(NetworkMetrics.Migrate(settings) | DesktopShortcuts.Migrate(settings) | TranslationProtocol.MigrateLanguages(settings))Save();
         InitializeComponent();
         Root.AddHandler(UIElement.PointerPressedEvent,new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPagePointerPressed),true);
-        Activated+=(_,args)=>{if(args.WindowActivationState==WindowActivationState.Deactivated)CommitFontSize(true);};
+        Activated+=(_,args)=>{if(!quitting && args.WindowActivationState==WindowActivationState.Deactivated)CommitFontSize(true);};
         Title = L.T("ClariBar");
         hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         desktopTools = new DesktopToolsController(this, settings, Save);
         AppWindow.Resize(new SizeInt32(1220, 860));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "ClariBar.ico"));
         InitializeShell();ApplyTheme();
-        trayCallback = action => DispatcherQueue.TryEnqueue(() =>
+        trayCallback = action => DispatcherQueue.TryEnqueue(() => AppDiagnostics.Run("tray-command",()=>
         {
             if (action == 1) ShowSettings();
-            else if (action == 2) _ = QuitAsync();
+            else if (action == 2) _ = AppDiagnostics.RunAsync("quit",QuitAsync);
             else if (action == 3) { settings.MiniMonitorEnabled = !settings.MiniMonitorEnabled; Save(); UpdateMonitor(); if (page == "taskbar") RenderPage(); }
             else if(action==4){settings.TaskbarMonitorEnabled=!settings.TaskbarMonitorEnabled;TaskbarChanged();if(page=="taskbar")RenderPage();}
-            else if(action is >=10 and <=22)_=ExecuteDesktopCommandAsync(action);
-        });
+            else if(action is >=10 and <=22)_=AppDiagnostics.RunAsync("desktop-command",()=>ExecuteDesktopCommandAsync(action));
+            else if(action==23 && !quitting && settings.CopyTranslationEnabled)_=desktopTools.TranslateCopiedTextAsync();
+        }));
         try { Native.CB_SetLanguage(Localizer.IsChinese?1:0);nativeReady = Native.CB_Start(trayCallback) == 1; }
         catch (Exception ex) { connection = L.F("Native module unavailable: {0}", ex.Message); }
         ConfigureToolHotkeys();
+        ConfigureCopyTranslation();
         AppWindow.Closing += (sender, e) =>
         {
             CommitFontSize(true);
@@ -100,11 +104,11 @@ public sealed partial class MainWindow : Window
         string? requestedPage=Environment.GetCommandLineArgs().FirstOrDefault(arg=>arg.StartsWith("--page="))?[7..];
         Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(item=>(string)item.Tag==requestedPage)
             ?? Nav.MenuItems.OfType<NavigationViewItem>().First();
-        freshnessTimer.Tick += (_, _) => UpdateLive();
+        freshnessTimer.Tick += (_, _) => AppDiagnostics.Run("monitor-refresh",UpdateLive);
         freshnessTimer.Start();
         _ = ConnectAsync(Environment.GetCommandLineArgs().Contains("--elevated") || (!smokeTest && settings.HardwareAccessEnabled));
         if (!smokeTest && TaskbarController.Needed(settings)) _ = EnsureTaskbarAsync();
-        if(!smokeTest)desktopRestore=desktopTools.RestoreAsync();
+        if(!smokeTest)desktopRestore=AppDiagnostics.RunAsync("restore-desktop-tools",desktopTools.RestoreAsync);
         if (smokeTest) { if (Environment.GetCommandLineArgs().Contains("--desktop-tools-check")) _ = CheckDesktopToolsAsync(); else _ = SmokeTestAsync(); }
     }
 
@@ -124,7 +128,7 @@ public sealed partial class MainWindow : Window
             snapshot = SensorSnapshot.Empty("connecting");
             var next = new BrokerClient { IntervalMs = settings.IntervalMs };
             broker = next;
-            next.Sample += data => DispatcherQueue.TryEnqueue(() =>
+            next.Sample += data => DispatcherQueue.TryEnqueue(() => AppDiagnostics.Run("sensor-sample",()=>
             {
                 if (quitting || broker != next) return;
                 snapshot = data;
@@ -139,8 +143,8 @@ public sealed partial class MainWindow : Window
                     File.WriteAllText(Path.Combine(AppPaths.Logs,"claribar-connection-state.json"),JsonSerializer.Serialize(ConnectionUiSnapshot(),new JsonSerializerOptions(Wire.Json){WriteIndented=true}));
                 }
 
-            });
-            next.StateChanged += state => DispatcherQueue.TryEnqueue(() =>
+            }));
+            next.StateChanged += state => DispatcherQueue.TryEnqueue(() => AppDiagnostics.Run("sensor-state",()=>
             {
                 if (broker != next || quitting) return;
                 SetConnectionState(state.Phase,state.Message);
@@ -148,7 +152,7 @@ public sealed partial class MainWindow : Window
                 // Do not keep showing old valid-looking values after disconnect.
                 snapshot = snapshot with { Status = "disconnected", CapturedAt = DateTimeOffset.MinValue };
                 UpdateLive();
-            });
+            }));
             next.Failed+=cancelled=>DispatcherQueue.TryEnqueue(()=>
             {
                 if(broker!=next || quitting || !elevated)return;
@@ -175,10 +179,12 @@ public sealed partial class MainWindow : Window
     private void RenderPage()
     {
         if (PageContent is null) return;
-        sensorList = null; statusText = null; accessInfo = null; networkInfo=null; taskbarInfo = null; countText = null; emptySensors = null;
+        sensorList = null; statusText = null; countText = null; emptySensors = null;
+        taskbarConnectionButton=null;taskbarDiagnosticsButton=null;taskbarConnectionMessage=null;
+        taskbarStyleOption=null;taskbarOpacityOption=null;taskbarStyleSelector=null;taskbarOpacitySlider=null;
         cpuValue = gpuValue = temperatureValue = fanValue = null;
         deviceFilter = null; renameSelector = null; metricColorSelector = null; taskbarPreview = null;
-        hardwareAction=null;hardwareState=null;hardwareProgress=null;sensorTitleRow=null;sensorFilters=null;sensorFilterSummary=null;unavailableFilter=null;
+        hardwareAction=null;hardwareState=null;hardwareProgress=null;sensorTitleRow=null;sensorFilters=null;sensorFilterSummary=null;
         fontSizeEditor=null;languageSelector=null;
         responsiveLayouts.Clear();layoutControls.Clear();
         PageContent.Children.Clear();
@@ -231,7 +237,7 @@ public sealed partial class MainWindow : Window
     }
     private void Heading(string title) => PageContent.Children.Add(new TextBlock
     { Text = title, FontSize = 15, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 16, 0, 2) });
-    private void Row(string title, string subtitle, UIElement control, string glyph = "\uE713")
+    private Grid Row(string title, string subtitle, UIElement control, string glyph = "\uE713")
     {
         var grid = new Grid { ColumnSpacing = 16 };
         grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
@@ -245,6 +251,7 @@ public sealed partial class MainWindow : Window
         Grid.SetColumn((FrameworkElement)control, 2); grid.Children.Add(control);
         layoutControls.Add((FrameworkElement)control);
         PageContent.Children.Add(Card(grid));ResponsiveRow(grid,(FrameworkElement)control);
+        return grid;
     }
     private ToggleSwitch Toggle(bool current, Action<bool> changed)
     {
@@ -274,7 +281,6 @@ public sealed partial class MainWindow : Window
         }
         cpuValue = values[0]; temperatureValue = values[1]; gpuValue = values[2]; fanValue = values[3];
         ResponsiveTiles(tiles,4);PageContent.Children.Add(tiles);
-        accessInfo = Notice(L.T("Hardware access"), L.T("Connecting to sensors…"));
         Row(L.T("Read temperatures and fan speeds"), L.T("Authorize the separate sensor process to access hardware while settings run with standard permissions."),
             HardwareActionControl(), "\uEA18");
         Row(L.T("Monitor window"), L.T("Show pinned metrics in a floating window. Click-through is enabled by default; disable it to drag."),
@@ -290,18 +296,16 @@ public sealed partial class MainWindow : Window
     private void BuildTaskbar()
     {
         AddTaskbarPreview();
-        taskbarInfo = Notice(L.T("Explorer taskbar integration"), L.T("Checks the taskbar controls and applied state after connecting."));
-        Row(L.T("Taskbar connection"), L.T("Reconnect after Windows or display changes. Disabling taskbar features restores the original appearance."),
-            Button(L.T("Connect / check again"), () => _ = EnsureTaskbarAsync(true), true), "\uE7F4");
+        taskbarConnectionButton=Button(L.T("Not connected"), () => _ = EnsureTaskbarAsync(true), true);
+        taskbarDiagnosticsButton=Button(L.T("Export diagnostics"),ExportDiagnostics);
+        taskbarDiagnosticsButton.Visibility=Visibility.Collapsed;
+        var connectionActions=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
+        connectionActions.Children.Add(taskbarConnectionButton);connectionActions.Children.Add(taskbarDiagnosticsButton);
+        var connectionRow=Row(L.T("Taskbar connection"), L.T("Reconnect after Windows or display changes. Disabling taskbar features restores the original appearance."),
+            connectionActions, "\uE7F4");
+        taskbarConnectionMessage=((StackPanel)connectionRow.Children[1]).Children.OfType<TextBlock>().Last();
         Heading(L.T("Taskbar background"));
-        var mode = new ComboBox { ItemsSource = new[] { L.T("Follow system"), L.T("Transparent"), L.T("Tinted") },
-            SelectedIndex = settings.TaskbarBackgroundMode switch { "Transparent" => 1, "Tinted" => 2, _ => 0 }, MinWidth = 160 };
-        mode.SelectionChanged += (_, _) => { settings.TaskbarBackgroundMode = mode.SelectedIndex switch {1=>"Transparent",2=>"Tinted",_=>"System"}; TaskbarChanged(); };
-        Row(L.T("Background style"), L.T("Customize the taskbar background. Follow system restores the original appearance."), mode, "\uE790");
-        AddColorPicker(L.T("Taskbar background color"), settings.TaskbarBackgroundColor, hex => settings.TaskbarBackgroundColor = hex);
-        var opacity = new Slider { Minimum = 0, Maximum = 100, Value = settings.TaskbarOpacity, StepFrequency = 1, Width = 200 };
-        opacity.ValueChanged += (_, args) => { settings.TaskbarOpacity = (int)args.NewValue; TaskbarChanged(); };
-        Row(L.T("Background opacity"), L.T("Used only for tinted backgrounds: 0% is transparent and 100% is solid."), opacity, "\uE790");
+        BuildTaskbarBackground();
         Heading(L.T("Embedded resource monitor"));
         Row(L.T("Embed in the Windows taskbar"), L.T("Displays as an actual item in the system tray layout, reserving space independently on each taskbar."),
             Toggle(settings.TaskbarMonitorEnabled, value => {settings.TaskbarMonitorEnabled=value;TaskbarChanged();}), "\uE9D9");
@@ -340,7 +344,7 @@ public sealed partial class MainWindow : Window
             if(args.Key==Windows.System.VirtualKey.Enter){CommitFontSize(true);args.Handled=true;}
             else if(args.Key==Windows.System.VirtualKey.Escape){SetFontSize(settings.MonitorFontSize);PageScroll.Focus(FocusState.Programmatic);args.Handled=true;}
         }),true);
-        size.LostFocus+=(_,_)=>{if(!Within(FocusManager.GetFocusedElement(Root.XamlRoot) as DependencyObject,size))CommitFontSize(false);};
+        size.LostFocus+=(_,_)=>{if(!quitting && size.IsLoaded && Root.XamlRoot is {} root && !Within(FocusManager.GetFocusedElement(root) as DependencyObject,size))CommitFontSize(false);};
         Row(L.T("Text size"),L.T("Press Enter or click outside to save. Use the arrow buttons to adjust one step at a time."),size,"\uE8D2");
         fontFamilies??=Native.FontFamilies();
         var fonts=new ComboBox {ItemsSource=fontFamilies,SelectedItem=settings.MonitorFontFamily,IsEditable=true,Text=settings.MonitorFontFamily,Width=240,MaxDropDownHeight=320};
@@ -378,9 +382,9 @@ public sealed partial class MainWindow : Window
     }
     private void CommitFontSize(bool releaseFocus)
     {
-        if(fontSizeEditor is null || updatingFontSize)return;
+        if(quitting || fontSizeEditor is null || updatingFontSize || !Root.IsLoaded || Root.XamlRoot is not {} root)return;
         var editor=fontSizeEditor;
-        bool focused=Within(FocusManager.GetFocusedElement(Root.XamlRoot) as DependencyObject,editor);
+        bool focused=Within(FocusManager.GetFocusedElement(root) as DependencyObject,editor);
         double value=double.TryParse(editor.Text,NumberStyles.Float,CultureInfo.CurrentCulture,out double entered) && double.IsFinite(entered)?entered:settings.MonitorFontSize;
         SetFontSize(value);
         if(releaseFocus && focused)PageScroll.Focus(FocusState.Programmatic);
@@ -398,21 +402,43 @@ public sealed partial class MainWindow : Window
     private async Task EnsureTaskbarAsync(bool force=false)
     {
         if(!nativeReady || taskbar.IsConnecting || quitting)return;
-        if(!taskbar.Attached || force)await taskbar.ConnectAsync();
+        if(!taskbar.Attached || force)
+        {
+            var connectionTask=taskbar.ConnectAsync();UpdateTaskbarInfo();
+            await connectionTask;
+        }
+        if(quitting)return;
         UpdateMonitor();UpdateTaskbarInfo();
     }
     private void UpdateTaskbarInfo()
     {
-        if(taskbarInfo is null)return;
         taskbar.Refresh();var state=taskbar.Status;
-        taskbarInfo.Title=taskbar.IsConnecting?L.T("Connecting to Explorer"):state.Frames>0?L.T("Taskbar connected"):L.T("Taskbar integration status");
-        taskbarInfo.Message=taskbar.IsConnecting?L.T("Inspecting the local XAML layout…"):taskbar.Error ??
+        if(taskbarConnectionButton is null)return;
+        ApplyTaskbarInfo(state);
+    }
+    private void ApplyTaskbarInfo(TaskbarStatus state)
+    {
+        if(taskbarConnectionButton is null)return;
+        bool missingMonitor=settings.TaskbarMonitorEnabled && !taskbar.IsConnecting && state.Frames>0 && state.Panels<state.Frames;
+        bool connected=state.Connected!=0 && state.Frames>0;
+        taskbarConnectionButton.Content=taskbar.IsConnecting?L.T("Connecting…"):connected?L.T("Recheck"):L.T("Not connected");
+        taskbarConnectionButton.IsEnabled=!taskbar.IsConnecting && !quitting;
+        string details=taskbar.IsConnecting?L.T("Inspecting the local XAML layout…"):taskbar.Error ??
             (state.Connected==0?L.T("Not connected. Taskbar features connect automatically when enabled."):
             L.F("{0} taskbars connected · {1} embedded monitors · Time and date: {2} · System icons: {3}", state.Frames, state.Panels, (state.Times>0 && state.Dates>0?L.T("Available"):L.T("Not checked")), (state.SystemIcons>0?L.T("Available"):L.T("Not checked"))));
-        if(state.LastError!=0)taskbarInfo.Message+=L.F("; taskbar error 0x{0:X8}", state.LastError);
-        if(state.AttachResult<0)taskbarInfo.Message+=L.F("; connection error 0x{0:X8}. Choose Connect / check again.", state.AttachResult);
-        taskbarInfo.Message=L.T(taskbarInfo.Message);
-        taskbarInfo.Severity=taskbar.Error is not null || state.LastError!=0 || state.AttachResult<0?InfoBarSeverity.Warning:InfoBarSeverity.Informational;
+        if(state.LastError!=0)details+=L.F("; taskbar error 0x{0:X8}", state.LastError);
+        if(state.AttachResult<0)details+=L.F("; connection error 0x{0:X8}. Choose Connect / check again.", state.AttachResult);
+        if(missingMonitor)
+        {
+            details=L.T(state.Panels==0?"Taskbar monitor not embedded":"Taskbar monitor partially embedded")+"\n"+
+                L.T("Taskbar styling is connected, but monitoring could not be embedded in every taskbar layout. Sensor readings and the preview work independently. Reconnect or export diagnostics.");
+            if(state.LastError!=0)details+=L.F("; taskbar error 0x{0:X8}", state.LastError);
+        }
+        bool issue=missingMonitor || taskbar.Error is not null || state.LastError!=0 || state.AttachResult<0;
+        ToolTipService.SetToolTip(taskbarConnectionButton,L.T(details));
+        if(taskbarDiagnosticsButton is not null)taskbarDiagnosticsButton.Visibility=issue?Visibility.Visible:Visibility.Collapsed;
+        if(taskbarConnectionMessage is not null)taskbarConnectionMessage.Text=issue?L.T(details):
+            L.T("Reconnect after Windows or display changes. Disabling taskbar features restores the original appearance.");
     }
 
     private void SetConnectionState(BrokerPhase phase,string message)
@@ -486,13 +512,8 @@ public sealed partial class MainWindow : Window
 
     private void BuildSensors()
     {
-        accessInfo = Notice(L.T("Live sensors"), L.T("Shows actual readings when connected. Unavailable readings appear as —."));
-        networkInfo=Notice(L.T("Default physical uplink"),L.T("Checking the default route…"));
+        Notice(L.T("Common metrics"), L.T("Common metrics include overall usage, CPU/GPU temperatures, disk activity and transfers, and physical uplink traffic. Select up to 8 to pin."));
         var filters=new Grid {ColumnSpacing=8};sensorFilters=filters;
-        filters.ColumnDefinitions.Add(new(){Width=new GridLength(160)});
-        filters.ColumnDefinitions.Add(new(){Width=new GridLength(160)});
-        filters.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star),MinWidth=110});
-        filters.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var categories = new ComboBox { ItemsSource = new[] { L.T("All categories"), "CPU", "GPU", L.T("Motherboard & fans"), L.T("Disk"), L.T("Network"), L.T("Memory") }, SelectedItem = category, HorizontalAlignment = HorizontalAlignment.Stretch };
         categories.SelectionChanged += (_, _) => { category = (string)categories.SelectedItem; deviceId = ""; PopulateDevices(); RefreshSensorRows(); };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(categories,L.T("Device category"));
@@ -505,16 +526,17 @@ public sealed partial class MainWindow : Window
         { if (!synchronizingSelection) { deviceId = (deviceFilter.SelectedItem as DeviceOption)?.Id ?? ""; RefreshSensorRows(); } };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(deviceFilter,L.T("Hardware device"));
         ToolTipService.SetToolTip(deviceFilter,L.T("Filter by hardware device"));Grid.SetColumn(deviceFilter,2);filters.Children.Add(deviceFilter);
-        sensorFilterSummary=new StackPanel {Orientation=Orientation.Horizontal,Spacing=10,Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center};
+        sensorFilterSummary=new StackPanel {Orientation=Orientation.Horizontal,VerticalAlignment=VerticalAlignment.Center};
         countText=Description("");countText.VerticalAlignment=VerticalAlignment.Center;sensorFilterSummary.Children.Add(countText);
-        unavailableFilter=new CheckBox {Content=L.T("Show sensors without readings"),IsChecked=showUnavailable,VerticalAlignment=VerticalAlignment.Center};
-        unavailableFilter.Checked+=(_,_)=>{showUnavailable=true;PopulateDevices();RefreshSensorRows();};
-        unavailableFilter.Unchecked+=(_,_)=>{showUnavailable=false;PopulateDevices();RefreshSensorRows();};sensorFilterSummary.Children.Add(unavailableFilter);
-        Grid.SetColumn(sensorFilterSummary,3);filters.Children.Add(sensorFilterSummary);PageContent.Children.Add(filters);
-        var search = new TextBox { PlaceholderText = L.T("Filter by name, device or sensor identifier"), Text = query };
+        filters.Children.Add(sensorFilterSummary);
+        var search = new TextBox { PlaceholderText = L.T("Search name"), Text = query, MinWidth=0, VerticalAlignment=VerticalAlignment.Center };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(search,L.T("Search name"));
         search.TextChanged += (_, _) => { query = search.Text.Trim(); RefreshSensorRows(); };
-        PageContent.Children.Add(search);
-        PageContent.Children.Add(Description(L.T("Common metrics include overall usage, CPU/GPU temperatures, disk activity and transfers, and physical uplink traffic. Select up to 8 to pin.")));
+        filters.Children.Add(search);
+        var editOrder=Button(L.T("Edit order"), () => _ = ShowMetricOrderAsync());
+        filters.Children.Add(editOrder);
+        foreach(var control in new FrameworkElement[]{categories,kinds,deviceFilter,search,editOrder,sensorFilterSummary})layoutControls.Add(control);
+        PageContent.Children.Add(filters);
         var header = new Grid { ColumnSpacing = 12, Padding = new Thickness(46, 6, 18, 4) };
         PageContent.Children.Add(header);
         sensorList = new ListView { ItemsSource = sensorRows, SelectionMode = ListViewSelectionMode.Multiple,
@@ -531,13 +553,13 @@ public sealed partial class MainWindow : Window
            </Grid>
           </DataTemplate>
           """);
-        ResponsiveSensors(filters,categories,kinds,deviceFilter!,sensorFilterSummary!,header,sensorList,sensorList.ItemTemplate);
+        ResponsiveSensors(filters,categories,kinds,deviceFilter!,search,editOrder,sensorFilterSummary!,header,sensorList,sensorList.ItemTemplate);
         sensorList.SelectionChanged += (_, args) =>
         {
             if (synchronizingSelection) return;
-            var selected = settings.PinnedSensors.ToHashSet();
+            var selected = settings.PinnedSensors.ToList();
             foreach (var row in args.RemovedItems.OfType<SensorRow>()) selected.Remove(row.Id);
-            foreach (var row in args.AddedItems.OfType<SensorRow>()) selected.Add(row.Id);
+            foreach (var row in args.AddedItems.OfType<SensorRow>()) if (!selected.Contains(row.Id)) selected.Add(row.Id);
             if (selected.Count > 8)
             {
                 SynchronizePinned();
@@ -571,8 +593,8 @@ public sealed partial class MainWindow : Window
     private void PopulateDevices()
     {
         if (deviceFilter is null) return;
-        var devices = SensorCatalog.Filter(snapshot,sensorKind,settings.PinnedSensors,showUnavailable).Where(s => category == L.T("All categories") || s.Category == category)
-            .GroupBy(s => s.HardwareId).Select(g => new DeviceOption(g.Key, g.First().Hardware)).OrderBy(d => d.Name).ToList();
+        var devices = SensorCatalog.Filter(snapshot,sensorKind,settings.PinnedSensors,false).Where(s => category == L.T("All categories") || s.Category == category)
+            .GroupBy(s => s.HardwareId).Select(g => new DeviceOption(g.Key, g.First().DisplayHardware)).OrderBy(d => d.Name).ToList();
         devices.Insert(0,new("",L.T("All hardware")));
         if ((deviceFilter.ItemsSource as List<DeviceOption>)?.SequenceEqual(devices) == true) return;
         synchronizingSelection = true;
@@ -587,11 +609,12 @@ public sealed partial class MainWindow : Window
     private void RefreshSensorRows()
     {
         if (sensorList is null) return;
-        var desired = SensorCatalog.Filter(snapshot,sensorKind,settings.PinnedSensors,showUnavailable).Where(s=>
+        var desired = SensorCatalog.Filter(snapshot,sensorKind,settings.PinnedSensors,false).Where(s=>
             (category==L.T("All categories") || s.Category==category) && (deviceId.Length==0 || s.HardwareId==deviceId) &&
             (query.Length==0 || $"{s.Name} {s.DisplayName} {s.Hardware} {s.Id} {settings.SensorNames.GetValueOrDefault(s.Id)}".Contains(query,StringComparison.OrdinalIgnoreCase)))
             .OrderBy(s=>s.Category switch {"CPU"=>0,"GPU"=>1,_ when s.Category == L.T("Memory") =>2,_ when s.Category == L.T("Disk") =>3,_ when s.Category == L.T("Network") =>4,_=>5})
             .ThenBy(s=>s.Hardware).ThenBy(s=>s.Kind).ThenBy(s=>s.Id).ToArray();
+        if (sensorKind == L.T("Pinned")) desired = desired.OrderBy(sensor => Array.IndexOf(settings.PinnedSensors, sensor.Id)).ToArray();
         synchronizingSelection = true;
         try
         {
@@ -634,9 +657,10 @@ public sealed partial class MainWindow : Window
         header.Children.Add(new TextBlock {Text=L.T("Taskbar preview"),FontSize=16,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
         var actions=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
         var desktop=new ComboBox {ItemsSource=new[]{L.T("Dark desktop"),L.T("Light desktop")},SelectedIndex=0,MinWidth=130};
-        actions.Children.Add(desktop);actions.Children.Add(Button(L.T("Expand preview"),()=>_=ShowTaskbarPreviewAsync()));Grid.SetColumn(actions,1);header.Children.Add(actions);
+        actions.Children.Add(desktop);actions.Children.Add(Button(L.T("Edit order"),()=>_=ShowMetricOrderAsync()));actions.Children.Add(Button(L.T("Expand preview"),()=>_=ShowTaskbarPreviewAsync()));Grid.SetColumn(actions,1);header.Children.Add(actions);
         taskbarPreview=new TaskbarPreview();desktop.SelectionChanged+=(_,_)=>taskbarPreview?.SetDesktop(desktop.SelectedIndex==0);
-        ResponsiveHeader(header,actions,560);
+        ResponsiveHeader(header,actions,700);
+        Responsive(width => actions.Orientation = width < 480 ? Orientation.Vertical : Orientation.Horizontal);
         content.Children.Add(header);content.Children.Add(taskbarPreview);content.Children.Add(Description(L.T("Monitoring uses live data. The preview follows the current layout, font and colors; system icons are illustrative.")));
         PageContent.Children.Add(Card(content));
     }
@@ -696,19 +720,30 @@ public sealed partial class MainWindow : Window
         Heading(L.T("Monitor text"));
         AddColorPicker(L.T("Default text color"), settings.MonitorColor, hex => settings.MonitorColor = hex);
         var selection = new ComboBox { DisplayMemberPath="DisplayName", PlaceholderText=L.T("Select a metric"), HorizontalAlignment=HorizontalAlignment.Stretch,
-            ItemsSource=CustomizableSensors() };
+            ItemsSource=CustomizableSensors(),MinWidth=160 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(selection,L.T("Select a metric"));
         metricColorSelector=selection;
-        var actions=new StackPanel {Orientation=Orientation.Horizontal,Spacing=8};
-        actions.Children.Add(Button(L.T("Choose color"),()=>
+        var choose=Button(L.T("Choose color"),()=>
         {
             if(selection.SelectedItem is not SensorReading reading)return;
             ScreenColor.TryParse(settings.SensorColors.GetValueOrDefault(reading.Id,settings.MonitorColor),out var color);
             desktopTools.OpenColor(color,hex=>{settings.SensorColors[reading.Id]=hex;TaskbarChanged();});
-        }));
-        actions.Children.Add(Button(L.T("Use default color"),()=>{if(selection.SelectedItem is SensorReading reading){settings.SensorColors.Remove(reading.Id);TaskbarChanged();}}));
-        var perMetric=new StackPanel {Spacing=10};perMetric.Children.Add(selection);perMetric.Children.Add(actions);
-        Row(L.T("Per-metric text colors"), L.T("Colors are stored by sensor identifier and shared by embedded and floating monitors."), new TextBlock(), "\uE790");
-        PageContent.Children.Add(Card(perMetric));
+        });
+        var reset=Button(L.T("Use default color"),()=>{if(selection.SelectedItem is SensorReading reading){settings.SensorColors.Remove(reading.Id);TaskbarChanged();}});
+        choose.IsEnabled=reset.IsEnabled=false;
+        selection.SelectionChanged+=(_,_)=>choose.IsEnabled=reset.IsEnabled=selection.SelectedItem is SensorReading;
+        var perMetric=new Grid {ColumnSpacing=8,RowSpacing=8};
+        perMetric.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});
+        perMetric.ColumnDefinitions.Add(new(){Width=GridLength.Auto});perMetric.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        perMetric.RowDefinitions.Add(new(){Height=GridLength.Auto});perMetric.RowDefinitions.Add(new(){Height=GridLength.Auto});
+        perMetric.Children.Add(selection);Grid.SetColumn(choose,1);perMetric.Children.Add(choose);Grid.SetColumn(reset,2);perMetric.Children.Add(reset);
+        Row(L.T("Select a metric"), L.T("Colors are stored by sensor identifier and shared by embedded and floating monitors."), perMetric, "\uE790");
+        Responsive(width=>
+        {
+            bool compact=width<600;
+            perMetric.MinWidth=compact?0:400;selection.MinWidth=compact?0:160;
+            Grid.SetColumnSpan(selection,compact?3:1);Grid.SetRow(choose,compact?1:0);Grid.SetRow(reset,compact?1:0);
+        });
         AddMonitorLayoutControls();
         Heading(L.T("Floating monitor background"));
         AddColorPicker(L.T("Floating window background color"), settings.MonitorBackground, hex => settings.MonitorBackground = hex);
@@ -716,7 +751,6 @@ public sealed partial class MainWindow : Window
         opacity.ValueChanged += (_, args) => { settings.MonitorOpacity = (int)args.NewValue; Save(); UpdateMonitor(); };
         Row(L.T("Floating monitor opacity"), L.T("Applies only to the floating monitor. Configure the taskbar background on the Taskbar page."), opacity, "\uE790");
         Heading(L.T("System taskbar text & icons"));
-        taskbarInfo=Notice(L.T("System foreground colors"), L.T("Supports time, date and monochrome system icons. Third-party color tray bitmaps retain their original appearance."));
         SystemColorRow(L.T("Time"),"\uE917",settings.TimeColor,settings.TimeColorEnabled,v=>settings.TimeColorEnabled=v,v=>settings.TimeColor=v);
         SystemColorRow(L.T("Date"),"\uE787",settings.DateColor,settings.DateColorEnabled,v=>settings.DateColorEnabled=v,v=>settings.DateColor=v);
         SystemColorRow(L.T("System tray glyphs"),"\uE971",settings.TrayColor,settings.TrayColorEnabled,v=>settings.TrayColorEnabled=v,v=>settings.TrayColor=v);
@@ -735,7 +769,7 @@ public sealed partial class MainWindow : Window
         controls.Children.Add(Toggle(enabled,value=>{toggle(value);TaskbarChanged();}));
         Row(title,L.T("Enable a fixed color or disable it to follow Windows. Individual colors override the general tray color."),controls,glyph);
     }
-    private void AddColorPicker(string title, string value, Action<string> changed)
+    private Button AddColorPicker(string title, string value, Action<string> changed)
     {
         var hexText = new TextBlock { Text = value, VerticalAlignment = VerticalAlignment.Center };
         var button = new Button { Content = hexText };
@@ -745,6 +779,7 @@ public sealed partial class MainWindow : Window
             desktopTools.OpenColor(current, hex => { changed(hex); hexText.Text = hex; TaskbarChanged(); });
         };
         Row(title, L.T("Open the color picker to preview changes immediately."), button, "\uE790");
+        return button;
     }
     private static Color ParseColor(string hex) => Color.FromArgb(255, Convert.ToByte(hex[1..3], 16), Convert.ToByte(hex[3..5], 16), Convert.ToByte(hex[5..7], 16));
     private void BuildGeneral()
@@ -799,30 +834,6 @@ public sealed partial class MainWindow : Window
             var fans = snapshot.Sensors.Where(s => s.Kind == "Fan" && s.IsValid).ToArray();
             fanValue.Text = fresh && fans.Length > 0 ? $"{fans.Count(s => s.Value > 0)} / {fans.Length}" : "—";
         }
-        if (accessInfo is not null)
-        {
-            accessInfo.Title=HardwareStatusText();
-            accessInfo.Message = !fresh || snapshot.Sensors.Length == 0 ? connection
-                : snapshot.Errors.Length > 0 ? string.Join(Localizer.IsChinese?"；":"; ", snapshot.Errors.Take(2).Select(L.T))
-                : snapshot.Elevated ? L.T("CPU temperatures and motherboard fans depend on hardware support. Unavailable readings remain —.")
-                : L.T("CPU, GPU, memory and physical network traffic are available. Authorize hardware access for CPU temperatures, core clocks and detailed disk readings.");
-            if(accessFallbackNotice is not null)accessInfo.Message=accessFallbackNotice+"\n"+accessInfo.Message;
-            accessInfo.Severity=snapshot.Errors.Length>0 || accessFallbackNotice is not null || connectionPhase is BrokerPhase.Failed or BrokerPhase.Cancelled?InfoBarSeverity.Warning:
-                connectionPhase==BrokerPhase.Connected && fresh && snapshot.Elevated?InfoBarSeverity.Success:InfoBarSeverity.Informational;
-        }
-        if(accessInfo is not null && fresh)
-        {
-            var issues=snapshot.Capabilities.Where(capability=>capability.Status!="valid" && capability.Key.EndsWith("/Temperature",StringComparison.Ordinal)).ToArray();
-            if(issues.Length>0)accessInfo.Message+="\n"+string.Join(Localizer.IsChinese?"；":"; ",issues.Select(capability=>L.F("{0}: {1}",capability.DisplayLabel,L.T(capability.Explanation))));
-        }
-        if(networkInfo is not null)
-        {
-            var route=snapshot.Network;
-            networkInfo.Title=route is {InterfaceIndex:>0}?L.F("Physical uplink: {0}", route.Name):L.T("Default physical uplink");
-            networkInfo.Message=route is null?L.T("Physical uplink data has not arrived."):route.InterfaceIndex==0?L.T(route.Message):
-                L.F("{0} · Interface {1} · {2} virtual or nonphysical interfaces excluded. Traffic includes all transfers through the physical uplink.", route.Description, route.InterfaceIndex, route.ExcludedAdapters);
-            networkInfo.Severity=route is {InterfaceIndex:>0}?InfoBarSeverity.Informational:InfoBarSeverity.Warning;
-        }
         if (page == "sensors")
         {
             PopulateDevices(); RefreshSensorRows();
@@ -845,6 +856,7 @@ public sealed partial class MainWindow : Window
     {
         var config=MonitorConfig();
         taskbarPreview?.Update(settings,config);expandedPreview?.Update(settings,config);
+        metricOrderEditor?.Update(snapshot,config);
         if(!nativeReady)return;
         Native.CB_XamlConfigure(ref config);
         string text=config.MetricCount==0?L.T("ClariBar · Waiting for monitoring data"):string.Join("    ",config.Metrics.Take((int)config.MetricCount).Select(metric=>metric.Text));
@@ -859,7 +871,7 @@ public sealed partial class MainWindow : Window
             taskbar.Refresh();
             File.WriteAllText(Path.ChangeExtension(path,"tree.txt"),Native.ReadTaskbarTree());
             File.WriteAllText(path, JsonSerializer.Serialize(new
-            { version = AppVersion, system = Environment.OSVersion.VersionString, connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
+            { version = AppVersion, system = Environment.OSVersion.VersionString, compatibility=TaskbarController.CompatibilityDetails(), connection, snapshot, taskbar=taskbar.Status, pinnedSensors = settings.PinnedSensors },
                 new JsonSerializerOptions(Wire.Json) { WriteIndented = true }));
             _ = MessageAsync(L.T("Diagnostics exported"), path);
         }
@@ -887,7 +899,6 @@ public sealed partial class MainWindow : Window
         if (nativeReady) { Native.CB_Stop(); nativeReady = false; }
         if (broker is not null) await broker.DisposeAsync();
         Close();
-        Application.Current.Exit();
     }
 
     private async Task CheckFontSizeEditingAsync()

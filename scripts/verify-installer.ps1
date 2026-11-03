@@ -7,14 +7,16 @@ $registered=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Un
 if($registered -and !$ExistingTestRoot){throw 'Run the install/uninstall suite in an isolated Windows user profile without an existing ClariBar installation.'}
 $testRoot=if($ExistingTestRoot){$ExistingTestRoot}else{"$env:CLARIBAR_ROOT\temp\installer-check-$(Get-Date -Format yyyyMMdd-HHmmss)"}
 $app="$testRoot\app"
+if($registered -and $registered.InstallLocation.TrimEnd('\') -ne $app.TrimEnd('\')){throw 'ExistingTestRoot does not own the registered installation. Use verify-installer-upgrade.ps1 for isolated upgrade checks in this profile.'}
 $data="$testRoot\运行数据"
 [void](New-Item -ItemType Directory -Force -Path $testRoot,"$data\data")
 $sentinel="$data\data\keep-on-uninstall.txt"
 [IO.File]::WriteAllText($sentinel,'ClariBar installer must preserve runtime data.')
 $events=@()
 function Assert($condition,[string]$message){if(!$condition){throw $message}}
-function Run-Installer([string]$log){
- $arguments=@('/VERYSILENT','/SUPPRESSMSGBOXES','/SP-','/NORESTART',"/DIR=`"$app`"","/DATAROOT=`"$data`"",'/MERGETASKS=!desktopicon',"/LOG=`"$log`"")
+function Run-Installer([string]$log,[switch]$ReusePrevious){
+ $arguments=@('/VERYSILENT','/SUPPRESSMSGBOXES','/SP-','/NORESTART',"/LOG=`"$log`"")
+ if(!$ReusePrevious){$arguments+=@("/DIR=`"$app`"","/DATAROOT=`"$data`"",'/MERGETASKS=!desktopicon')}
  $process=Start-Process $Installer -ArgumentList $arguments -PassThru
  Assert ($process.WaitForExit(180000)) 'Installer timed out.'
  Assert ($process.ExitCode -eq 0) "Installer exited with $($process.ExitCode)"
@@ -32,9 +34,10 @@ function Start-IsolatedApp([string]$arguments){
 if(!$ExistingTestRoot){Run-Installer "$testRoot\install.log"}
 Assert (Test-Path "$app\ClariBar.exe") 'Installed application missing.'
 Assert (([IO.File]::ReadAllText("$app\runtime-path.txt")).Trim() -eq $data) 'Selected Unicode data directory was not preserved.'
-foreach($directory in @($app,"$app\broker")){
- foreach($file in @('hostfxr.dll','coreclr.dll')){Assert (Test-Path "$directory\$file") "Self-contained runtime is missing: $directory\$file"}
+foreach($file in @('hostfxr.dll','coreclr.dll','ClariBar.SensorBroker.exe','ClariBar.SensorBroker.dll','ClariBar.SystemMetrics.dll')){
+ Assert (Test-Path "$app\$file") "Shared self-contained payload is missing: $file"
 }
+Assert (!(Test-Path "$app\broker\coreclr.dll")) 'The package contains a duplicate broker runtime.'
 $manifest=Get-Content "$app\payload-manifest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 foreach($entry in $manifest.files){
  if($entry.path -eq 'runtime-path.txt'){continue}
@@ -59,8 +62,10 @@ $events+=@{name='self-contained-start-without-development-runtime';passed=$true;
 $process=Start-IsolatedApp '--page=sensors'
 Start-Sleep -Seconds 5
 Assert (!$process.HasExited) 'Installed application did not stay running before upgrade.'
-Run-Installer "$testRoot\upgrade.log"
+Run-Installer "$testRoot\upgrade.log" -ReusePrevious
 Assert ($process.WaitForExit(15000)) 'Upgrade did not gracefully close the running application.'
+Assert ((Get-Content "$testRoot\upgrade.log" -Raw) -match 'Previous ClariBar uninstall completed') 'Upgrade did not execute the previous uninstaller.'
+Assert (([IO.File]::ReadAllText("$app\runtime-path.txt")).Trim() -eq $data) 'Upgrade did not reuse the previous runtime data directory.'
 Assert (([IO.File]::ReadAllText($sentinel)) -eq 'ClariBar installer must preserve runtime data.') 'Upgrade changed runtime data.'
 $events+=@{name='upgrade-running-application-and-preserve-data';passed=$true}
 $process=Start-IsolatedApp '--page=sensors'

@@ -38,6 +38,18 @@ public sealed partial class MainWindow
             if (expectedRoot is null || !string.Equals(Path.GetFullPath(expectedRoot).TrimEnd('\\'), AppPaths.Cache.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Desktop tool checks require an explicitly isolated CLARIBAR_DESKTOP_CHECK_ROOT matching the runtime root.");
             await Task.Delay(900); Directory.CreateDirectory(AppPaths.Logs);
+            if(Environment.GetCommandLineArgs().Contains("--settings-refinement-check")){await CheckSettingsRefinementAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--metric-order-check")){await CheckMetricOrderAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--taskbar-compat-check")){await CheckTaskbarCompatibilityAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--stability-check")){await CheckStabilityAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--copy-dismiss-check")){await CheckCopyPopupDismissalAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--copy-menu-check")){await CheckCopyMenuTranslationAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--configured-copy-menu-check")){await CheckConfiguredCopyMenuAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--responsiveness-check")){await CheckOcrStreamingAsync(Require);await CheckCaptureResponsivenessAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--capture-performance-check")){await CheckCaptureResponsivenessAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--configured-ocr-check")){await CheckConfiguredOcrStreamingAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--streaming-translation-check")){await CheckStreamingTranslationAsync(Require);return;}
+            if(Environment.GetCommandLineArgs().Contains("--copy-translation-check")){await CheckCopyTranslationAsync(Require);return;}
             if(Environment.GetCommandLineArgs().Contains("--caption-hover-check")){await CheckCaptionHoverAsync(Require);return;}
             if(Environment.GetCommandLineArgs().Contains("--configured-translation-check")){await CheckConfiguredTranslationAsync(Require);return;}
             if(Environment.GetCommandLineArgs().Contains("--translation-check")){await CheckTranslationAsync(Require);return;}

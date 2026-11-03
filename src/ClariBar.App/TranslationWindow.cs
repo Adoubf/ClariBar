@@ -17,6 +17,7 @@ internal sealed class TranslationWindow:Window
     private readonly PixelFrame frame;
     private readonly PixelRect position;
     private readonly bool overlay;
+    private readonly System.Net.Http.HttpMessageHandler? translationHandler;
     private readonly CancellationTokenSource cancellation=new();
     private readonly Grid root=new(){RowSpacing=12};
     private readonly TextBlock status=ToolUi.Label("");
@@ -30,14 +31,20 @@ internal sealed class TranslationWindow:Window
     private TranslationToolbarWindow? toolbar;
     private TranslationDocument? document;
     private string sourceText="";
-    private bool closed,running,started,showOriginal;
+    private bool closed,running,started,showOriginal,documentComplete;
+    private readonly DispatcherTimer streamTimer=new(){Interval=TimeSpan.FromMilliseconds(60)};
+    private TranslationDocument? pendingDocument;
+    internal int StreamingEvents {get;private set;}
+    internal int ProgressiveRenders {get;private set;}
     internal Task InitialTranslation {get;private set;}=Task.CompletedTask;
     internal TranslationDocument? Result=>document;
     internal bool IsOverlay=>overlay;
     internal Canvas TranslationMasks=>masks;
-    internal TranslationWindow(DesktopToolsController tools,PixelFrame frame,PixelRect position,bool overlay,TranslationDocument? document=null,bool startAutomatically=true,string? initialStatus=null,string? initialSource=null)
+    internal TranslationWindow(DesktopToolsController tools,PixelFrame frame,PixelRect position,bool overlay,TranslationDocument? document=null,bool startAutomatically=true,string? initialStatus=null,string? initialSource=null,System.Net.Http.HttpMessageHandler? translationHandler=null,bool resultComplete=true)
     {
         this.tools=tools;this.frame=frame;this.position=position;this.overlay=overlay;this.document=document;
+        documentComplete=document is not null && resultComplete;
+        this.translationHandler=translationHandler;streamTimer.Tick+=(_,_)=>FlushProgress();
         // Keep the overlay's text in the document. Unattached TextBoxes can keep
         // native text services alive past their XAML window during shutdown.
         if(!overlay)
@@ -63,11 +70,12 @@ internal sealed class TranslationWindow:Window
         {
             if(started)return;started=true;
             if(overlay){AppWindow.MoveAndResize(new(position.X,position.Y,position.Width,position.Height));toolbar?.Activate();toolbar?.Reposition();}
-            if(document is not null){ShowDocument();return;}
+            if(document is not null)
+            {ShowDocument(complete:documentComplete);if(!documentComplete){status.Text=initialStatus??"";if(overlay && status.Parent is Border error)error.Visibility=Visibility.Visible;}return;}
             if(!startAutomatically){status.Text=initialStatus??"";SetSource(initialSource??"");return;}
             InitialTranslation=RunAsync(saveOptions:false);await InitialTranslation;
         };
-        Closed+=(_,_)=>{closed=true;cancellation.Cancel();toolbar?.CloseWithOwner();cancellation.Dispose();};
+        Closed+=(_,_)=>{closed=true;streamTimer.Stop();pendingDocument=null;cancellation.Cancel();toolbar?.CloseWithOwner();cancellation.Dispose();};
     }
     private void BuildComparison()
     {
@@ -112,25 +120,39 @@ internal sealed class TranslationWindow:Window
             tools.Settings.TranslationSourceLanguage=TranslationLanguages.Read(source!,true);tools.Settings.TranslationTargetLanguage=TranslationLanguages.Read(target!,false);tools.Save();
         }
         running=true;translateButton.IsEnabled=switchButton.IsEnabled=false;SetOptionsEnabled(false);
+        streamTimer.Stop();pendingDocument=null;StreamingEvents=ProgressiveRenders=0;
+        documentComplete=false;
         document=null;if(translated is not null)translated.Text="";masks.Children.Clear();if(overlay && status.Parent is Border badge)badge.Visibility=Visibility.Visible;
         try
         {
             var queue=DispatcherQueue;
-            document=await TranslationService.TranslateAsync(frame,tools.Settings,text=>queue.TryEnqueue(()=>{if(!closed && running)status.Text=text;}),cancellation.Token,
-                lines=>{if(!closed)SetSource(string.Join(Environment.NewLine,lines.Select(line=>line.Source)));});
-            if(!closed)ShowDocument();
+            var completed=await TranslationService.TranslateAsync(frame,tools.Settings,text=>queue.TryEnqueue(()=>{if(!closed && running)status.Text=text;}),cancellation.Token,
+                lines=>{if(!closed)SetSource(string.Join(Environment.NewLine,lines.Select(line=>line.Source)));},
+                updated:update=>queue.TryEnqueue(()=>
+                {
+                    if(closed || !running)return;
+                    if(!update.Complete)StreamingEvents++;
+                    pendingDocument=update.Document;if(!streamTimer.IsEnabled)streamTimer.Start();
+                }),handler:translationHandler);
+            if(!closed){streamTimer.Stop();pendingDocument=null;document=completed;documentComplete=true;ShowDocument();}
         }
         catch(OperationCanceledException){}
-        catch(Exception ex){if(!closed)status.Text=ex.Message;}
-        finally{running=false;if(!closed){translateButton.IsEnabled=switchButton.IsEnabled=true;SetOptionsEnabled(true);}}
+        catch(Exception ex)
+        {if(!closed){FlushProgress();status.Text=(document is not null?L.T("Translation interrupted. Received text is kept.")+"\n":"")+ex.Message;if(overlay && status.Parent is Border error)error.Visibility=Visibility.Visible;}}
+        finally{running=false;streamTimer.Stop();pendingDocument=null;if(!closed){translateButton.IsEnabled=switchButton.IsEnabled=true;SetOptionsEnabled(true);}}
+    }
+    private void FlushProgress()
+    {
+        streamTimer.Stop();if(closed || pendingDocument is null)return;
+        document=pendingDocument;pendingDocument=null;ProgressiveRenders++;ShowDocument(complete:false);
     }
     private void SetSource(string text){sourceText=text;if(original is not null)original.Text=text;}
     private void SetOptionsEnabled(bool value){engines.IsEnabled=value;if(source is not null)source.IsEnabled=value;if(target is not null)target.IsEnabled=value;}
-    private void ShowDocument()
+    private void ShowDocument(bool complete=true)
     {
         if(document is null)return;SetSource(document.SourceText);if(translated is not null)translated.Text=document.TargetText;
-        status.Text=L.F("{0} → {1} · {2}",document.SourceLanguage,document.TargetLanguage,L.T(document.Engine switch{"Ai"=>"AI translation","Local"=>"Offline Chinese ↔ English",_=>"Free online (MyMemory)"}));
-        if(overlay){DrawMasks();if(status.Parent is Border badge)badge.Visibility=Visibility.Collapsed;}switchButton.IsEnabled=true;
+        if(complete)status.Text=L.F("{0} → {1} · {2}",document.SourceLanguage,document.TargetLanguage,L.T(document.Engine switch{"Ai"=>"AI translation","Local"=>"Offline Chinese ↔ English",_=>"Free online (MyMemory)"}));
+        if(overlay){DrawMasks();if(status.Parent is Border badge)badge.Visibility=Visibility.Collapsed;}if(complete)switchButton.IsEnabled=true;
     }
     private void DrawMasks()
     {
@@ -139,6 +161,7 @@ internal sealed class TranslationWindow:Window
         for(int index=0;index<document.Lines.Length;index++)
         {
             var line=document.Lines[index];var a=line.Bounds;
+            if(string.IsNullOrWhiteSpace(line.Target))continue;
             double left=Math.Max(0,(a.X-3)*sx),top=Math.Max(0,(a.Y-2)*sy);
             double width=Math.Min(root.ActualWidth-left,Math.Max(a.Width*sx+8,Math.Min(root.ActualWidth-left,180*sx)));
             // Extend only into empty space before the next OCR line. The original
@@ -157,7 +180,7 @@ internal sealed class TranslationWindow:Window
     private void SwitchMode()
     {
         if(running || closed)return;tools.Settings.TranslationDisplay=overlay?"Bilingual":"Overlay";tools.Save();
-        var replacement=new TranslationWindow(tools,frame,position,!overlay,document,startAutomatically:false,initialStatus:status.Text,initialSource:sourceText);tools.Track(replacement);replacement.Activate();Close();
+        var replacement=new TranslationWindow(tools,frame,position,!overlay,document,startAutomatically:false,initialStatus:status.Text,initialSource:sourceText,translationHandler:translationHandler,resultComplete:documentComplete);tools.Track(replacement);replacement.Activate();Close();
     }
 }
 

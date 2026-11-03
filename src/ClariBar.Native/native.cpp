@@ -13,6 +13,10 @@
 #include "text_ink.h"
 LRESULT ClariPickerDispatch(HWND,UINT,LPARAM,bool&);
 void ClariPickerShutdown();
+LRESULT ClariCopyDispatch(HWND,UINT,WPARAM,LPARAM,bool&);
+void ClariCopyShutdown();
+LRESULT ClariCaptureCoverDispatch(UINT,LPARAM,bool&);
+void ClariCaptureCoverShutdown();
 
 namespace {
 constexpr UINT trayMessage = WM_APP + 1, updateMessage = WM_APP + 2, languageMessage = WM_APP + 3;
@@ -187,7 +191,9 @@ void PositionMonitor() {
 }
 
 LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) {
+    bool coverHandled{};auto coverResult=ClariCaptureCoverDispatch(message,lparam,coverHandled);if(coverHandled)return coverResult;
     bool pickerHandled{};auto pickerResult=ClariPickerDispatch(window,message,lparam,pickerHandled);if(pickerHandled)return pickerResult;
+    bool copyHandled{};auto copyResult=ClariCopyDispatch(window,message,wparam,lparam,copyHandled);if(copyHandled)return copyResult;
     if(message==toolHotkeyMessage) {
         const auto* data=reinterpret_cast<const ToolHotkeyUpdate*>(lparam);
         if(data->slot<0 || data->slot>7)return ERROR_INVALID_PARAMETER;
@@ -259,6 +265,8 @@ LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) 
     }
     if(message==WM_CLOSE) {DestroyWindow(window);return 0;}
     if(message==WM_DESTROY) {
+        ClariCaptureCoverShutdown();
+        ClariCopyShutdown();
         ClariPickerShutdown();
         for(int id=10;id<=17;id++)UnregisterHotKey(window,id);
         RestoreTaskbars();NOTIFYICONDATAW data{sizeof(data)};data.hWnd=window;data.uID=iconId;Shell_NotifyIconW(NIM_DELETE,&data);
@@ -269,6 +277,7 @@ LRESULT CALLBACK HostProc(HWND window,UINT message,WPARAM wparam,LPARAM lparam) 
 }
 
 HWND ClariHostWindow(){return host;}
+void ClariNotifyCopy(){Notify(23);}
 
 extern "C" __declspec(dllexport) int __stdcall CB_SetToolHotkey(int slot,unsigned modifiers,unsigned key) {
     if(!host)return ERROR_INVALID_WINDOW_HANDLE;

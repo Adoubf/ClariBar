@@ -28,7 +28,13 @@ public sealed partial class MainWindow
             for(int attempt=0;attempt<500 && !InteractionField<bool>(window,"started");attempt++)await Task.Delay(20);
             for(int attempt=0;attempt<500 && InteractionField<TextBox>(window,"original").Text.Length==0 && !window.InitialTranslation.IsCompleted;attempt++)await Task.Delay(20);
             require(InteractionField<TextBox>(window,"original").Text.Contains("Features"),"Recognized source text is visible independently of AI response parsing");
+            bool readableBeforeCompletion=false;
+            for(int attempt=0;attempt<1000 && !window.InitialTranslation.IsCompleted;attempt++)
+            {if(window.ProgressiveRenders>0 && window.Result?.TargetText.Any(character=>character is >= '\u3400' and <= '\u9fff')==true){readableBeforeCompletion=true;break;}await Task.Delay(20);}
+            if(readableBeforeCompletion)await RenderCheckImageAsync(L.LanguageCode+"-configured-translation-progress",(FrameworkElement)window.Content);
             await window.InitialTranslation.WaitAsync(TimeSpan.FromMinutes(3));
+            require(readableBeforeCompletion,"The actual saved model displays readable translation before all screenshot paragraphs finish");
+            var screenshotStreaming=new{window.StreamingEvents,window.ProgressiveRenders,readableBeforeCompletion};
             require(window.Result is {Lines.Length:>0} && window.Result.Lines.Length==paragraphs.Length,"The actual configured model completes one translation for every source paragraph");
             var document=window.Result!;
             require(document.SourceLanguage=="en" && document.TargetLanguage=="zh" && settings.TranslationTargetLanguage=="Auto","The real English screenshot translates into Chinese without saving a fixed target language");
@@ -59,6 +65,18 @@ public sealed partial class MainWindow
             require(settings.TranslationTargetLanguage=="Auto" && TranslationLanguages.Read(InteractionField<ComboBox>(window,"target"),false)=="Auto","Two consecutive directions leave the target selector in automatic mode");
             await File.WriteAllTextAsync(Path.Combine(AppPaths.Logs,"configured-auto-directions.json"),JsonSerializer.Serialize(new{model=settings.AiTranslationModel,english=document,chinese=chineseDocument},new JsonSerializerOptions(Wire.Json){WriteIndented=true}));
             DesktopCapture.DwmFlush();await File.WriteAllBytesAsync(Path.Combine(AppPaths.Logs,L.LanguageCode+"-configured-translation-chinese-to-english.png"),await DesktopCapture.Capture(ToolWindowGeometry.ClientBounds(window)).PngAsync());window.Close();
+            var copied=new CopyTranslationWindow(desktopTools);desktopTools.Track(copied);
+            try
+            {
+                var copyRequest=copied.ShowTextAsync("Copy text to translate it beside the mouse pointer. The source application keeps keyboard focus.",120,120);InteractionField<DispatcherTimer>(copied,"dismiss").Stop();await copyRequest;
+                require(copied.TranslatedText.Any(character=>character is >= '\u3400' and <= '\u9fff'),"The copy popup uses the saved HY-MT connection to translate real English text into Chinese");
+                var copyStreaming=new{copied.StreamingEvents,copied.ProgressiveRenders};
+                await RenderCheckImageAsync(L.LanguageCode+"-configured-copy-translation",(FrameworkElement)copied.Content);
+                copyRequest=copied.ShowTextAsync("复制文字后，在鼠标右下方显示译文。原来的复制操作保持正常。",120,120);InteractionField<DispatcherTimer>(copied,"dismiss").Stop();await copyRequest;
+                require(copied.TranslatedText.Any(char.IsAsciiLetter) && !copied.TranslatedText.Any(character=>character is >= '\u3400' and <= '\u9fff'),"The same copy popup automatically reverses Chinese to English with the saved model");
+                await File.WriteAllTextAsync(Path.Combine(AppPaths.Logs,"configured-streaming-evidence.json"),JsonSerializer.Serialize(new{model=settings.AiTranslationModel,screenshot=screenshotStreaming,copyEnglish=copyStreaming,copyChinese=new{copied.StreamingEvents,copied.ProgressiveRenders}},new JsonSerializerOptions(Wire.Json){WriteIndented=true}));
+            }
+            finally{copied.Close();}
             ShowSettings();NavigateTo("tools");await Task.Delay(120);var panel=PageContent.Children.OfType<AiOcrSettingsPanel>().Single();panel.Expander.IsExpanded=true;panel.TestPurpose.SelectedIndex=1;
             if(AppWindow.Presenter is OverlappedPresenter mainPresenter)mainPresenter.IsAlwaysOnTop=true;
             ((IInvokeProvider)FrameworkElementAutomationPeer.CreatePeerForElement(panel.TestButton)!.GetPattern(PatternInterface.Invoke)).Invoke();await panel.LastTest;

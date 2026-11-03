@@ -13,9 +13,15 @@
 #ifndef ReleaseDir
   #error "Use scripts/package.ps1 to specify ReleaseDir."
 #endif
+#ifndef ClariBarAppId
+  #define ClariBarAppId "{93FDC1C2-EB8E-48A4-9CF0-F59AEB645816}"
+#endif
+#ifndef ClariBarGroupName
+  #define ClariBarGroupName "{cm:AppDisplayName}"
+#endif
 
 [Setup]
-AppId={{93FDC1C2-EB8E-48A4-9CF0-F59AEB645816}
+AppId={{#ClariBarAppId}
 AppName=ClariBar
 AppVersion={#AppVersion}
 AppVerName=ClariBar {#AppVersion}
@@ -24,11 +30,16 @@ AppPublisherURL=https://github.com/Adoubf/ClariBar
 AppSupportURL=https://github.com/Adoubf/ClariBar/issues
 AppUpdatesURL=https://github.com/Adoubf/ClariBar/releases
 AppComments=Windows 11 taskbar customization and live resource monitoring
-DefaultDirName={localappdata}\Programs\ClariBar
-DefaultGroupName={cm:AppDisplayName}
+DefaultDirName={autopf}\ClariBar
+DefaultGroupName={#ClariBarGroupName}
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
 PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=commandline
+UsePreviousAppDir=yes
+UsePreviousGroup=yes
+UsePreviousTasks=yes
+SetupMutex=ClariBar.Setup.{{#ClariBarAppId}
 SetupArchitecture=x64
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -78,6 +89,24 @@ english.DataSubtitle=Choose where to save settings, logs and temporary files
 chinesesimp.DataSubtitle=选择配置、日志和临时文件的保存位置
 english.DataDescription=Existing colors, fonts and monitoring choices are preserved. Uninstalling keeps your personal runtime data.
 chinesesimp.DataDescription=已有颜色、字体和监控指标会继续使用。卸载程序时保留这些个人设置。
+english.UpgradeDataDescription=Setup will remove the previous program and install this version, keeping your settings, credentials, history and downloaded models in the existing runtime data directory.
+chinesesimp.UpgradeDataDescription=安装程序将自动卸载旧程序并安装此版本，继续使用原运行数据目录，保留设置、密钥、历史记录和已下载模型。
+english.UpgradeSummary=Replace installed version %1 and keep its runtime data:
+chinesesimp.UpgradeSummary=替换已安装版本 %1，并保留其运行数据：
+english.RemovingPrevious=Removing the previous version of ClariBar. Your personal data will be kept...
+chinesesimp.RemovingPrevious=正在卸载旧版澄栏，保留个人数据……
+english.PreviousInstallInvalid=The previous ClariBar installation is incomplete. Its uninstaller could not be found or validated. Repair or uninstall that installation before trying again. Your personal data has not been removed.
+chinesesimp.PreviousInstallInvalid=检测到旧版澄栏安装不完整，无法找到或验证卸载程序。请先修复或卸载旧程序，再重新安装。个人数据未被删除。
+english.PreviousInstallConflict=More than one ClariBar installation was found. Remove the extra installation before continuing; personal runtime data is kept when uninstalling.
+chinesesimp.PreviousInstallConflict=检测到多个澄栏安装记录。请先卸载多余的程序，再继续安装；卸载时会保留个人运行数据。
+english.PreviousInstallAllUsers=ClariBar is installed for all users. Run this installer with /ALLUSERS to upgrade it in the same mode.
+chinesesimp.PreviousInstallAllUsers=旧版澄栏是为所有用户安装的。请使用 /ALLUSERS 参数运行此安装包，以相同模式升级。
+english.PreviousInstallCurrentUser=ClariBar is installed for the current user. Run this installer with /CURRENTUSER to upgrade that installation.
+chinesesimp.PreviousInstallCurrentUser=旧版澄栏是为当前用户安装的。请使用 /CURRENTUSER 参数运行此安装包，升级现有程序。
+english.PreviousUninstallFailed=Could not completely uninstall the previous version (error %1). Setup has stopped before installing new files. Your personal runtime data is kept. See the uninstall log: %2
+chinesesimp.PreviousUninstallFailed=无法完整卸载旧版（错误 %1），已停止安装新文件。个人运行数据会保留。请查看卸载日志：%2
+english.UpgradeDataPathChanged=Upgrades reuse the existing runtime data directory to preserve your configuration. Remove the /DATAROOT override or use the existing directory.
+chinesesimp.UpgradeDataPathChanged=升级会沿用原运行数据目录，以保留配置。请移除 /DATAROOT 参数，或将其设为原目录。
 english.DataDirectory=Runtime data directory:
 chinesesimp.DataDirectory=运行数据目录：
 english.ChooseLocalPath=Choose a full path on a local drive.
@@ -105,8 +134,102 @@ Filename: "{app}\prerequisites\PawnIO_setup.exe"; Description: "{cm:HardwareComp
 Filename: "{app}\ClariBar.exe"; WorkingDir: "{app}"; Description: "{cm:StartApplication}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+const
+  UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#ClariBarAppId}_is1';
 var
   DataPage: TInputDirWizardPage;
+  PreviousAppDir, PreviousUninstaller, PreviousDataRoot, PreviousVersion: String;
+  PreviousRemoved: Boolean;
+  PreviousRegRoot, PreviousOtherView: Integer;
+
+function SameDirectory(const Left, Right: String): Boolean;
+begin
+  Result := CompareText(RemoveBackslashUnlessRoot(Left), RemoveBackslashUnlessRoot(Right)) = 0;
+end;
+
+function IsLocalDirectory(const Value: String): Boolean;
+begin
+  Result := False;
+  if Length(Value) >= 3 then
+    Result := (Value[2] = ':') and (Value[3] = '\') and
+      (((Value[1] >= 'A') and (Value[1] <= 'Z')) or ((Value[1] >= 'a') and (Value[1] <= 'z')));
+end;
+
+function UninstallerPath(Value: String): String;
+var
+  ClosingQuote: Integer;
+begin
+  Value := Trim(Value);
+  Result := Value;
+  if (Length(Value) > 0) and (Value[1] = '"') then begin
+    Delete(Value, 1, 1);
+    ClosingQuote := Pos('"', Value);
+    if ClosingQuote = 0 then Result := ''
+    else Result := Copy(Value, 1, ClosingQuote - 1);
+  end;
+end;
+
+function InitializeSetup: Boolean;
+var
+  OtherRoot64, OtherRoot32: Integer;
+  OtherAppDir, Command, DataOverride, Error: String;
+  RuntimePath: AnsiString;
+begin
+  Result := False;
+  PreviousRemoved := False;
+  if IsAdminInstallMode then begin
+    PreviousRegRoot := HKLM64;PreviousOtherView := HKLM32;
+    OtherRoot64 := HKCU64;OtherRoot32 := HKCU32;
+  end else begin
+    PreviousRegRoot := HKCU64;PreviousOtherView := HKCU32;
+    OtherRoot64 := HKLM64;OtherRoot32 := HKLM32;
+  end;
+  if not RegKeyExists(PreviousRegRoot, UninstallKey) then begin
+    PreviousRegRoot := PreviousOtherView;
+    PreviousOtherView := 0;
+  end;
+  if RegKeyExists(OtherRoot64, UninstallKey) or RegKeyExists(OtherRoot32, UninstallKey) then begin
+    if RegKeyExists(PreviousRegRoot, UninstallKey) then Error := CustomMessage('PreviousInstallConflict')
+    else if IsAdminInstallMode then Error := CustomMessage('PreviousInstallCurrentUser')
+    else Error := CustomMessage('PreviousInstallAllUsers');
+  end else if RegKeyExists(PreviousRegRoot, UninstallKey) then begin
+    RegQueryStringValue(PreviousRegRoot, UninstallKey, 'InstallLocation', PreviousAppDir);
+    RegQueryStringValue(PreviousRegRoot, UninstallKey, 'UninstallString', Command);
+    RegQueryStringValue(PreviousRegRoot, UninstallKey, 'DisplayVersion', PreviousVersion);
+    PreviousAppDir := RemoveBackslashUnlessRoot(PreviousAppDir);
+    PreviousUninstaller := UninstallerPath(Command);
+    if (PreviousOtherView <> 0) and RegKeyExists(PreviousOtherView, UninstallKey) then begin
+      RegQueryStringValue(PreviousOtherView, UninstallKey, 'InstallLocation', OtherAppDir);
+      if not SameDirectory(PreviousAppDir, OtherAppDir) then Error := CustomMessage('PreviousInstallConflict');
+    end;
+    if Error = '' then begin
+      if not IsLocalDirectory(PreviousAppDir) or
+         not SameDirectory(ExtractFileDir(PreviousUninstaller), PreviousAppDir) or
+         (CompareText(Copy(ExtractFileName(PreviousUninstaller), 1, 5), 'unins') <> 0) or
+         (CompareText(ExtractFileExt(PreviousUninstaller), '.exe') <> 0) or
+         not FileExists(PreviousUninstaller) or
+         not FileExists(ChangeFileExt(PreviousUninstaller, '.dat')) then
+        Error := CustomMessage('PreviousInstallInvalid');
+    end;
+    if Error = '' then begin
+      RegQueryStringValue(PreviousRegRoot, UninstallKey, 'Inno Setup CodeFile: DataRoot', PreviousDataRoot);
+      if not IsLocalDirectory(PreviousDataRoot) and
+         LoadStringFromFile(PreviousAppDir + '\runtime-path.txt', RuntimePath) then begin
+        PreviousDataRoot := Trim(Utf8Decode(RuntimePath));
+        if (Length(PreviousDataRoot) > 0) and (PreviousDataRoot[1] = #$FEFF) then Delete(PreviousDataRoot, 1, 1);
+      end;
+      if not IsLocalDirectory(PreviousDataRoot) then PreviousDataRoot := ExpandConstant('{localappdata}\ClariBar');
+      PreviousDataRoot := RemoveBackslashUnlessRoot(PreviousDataRoot);
+      DataOverride := ExpandConstant('{param:DATAROOT|}');
+      if (DataOverride <> '') and not SameDirectory(DataOverride, PreviousDataRoot) then
+        Error := CustomMessage('UpgradeDataPathChanged');
+      Log('Detected previous ClariBar ' + PreviousVersion + ' at ' + PreviousAppDir);
+      Log('Preserving runtime data at ' + PreviousDataRoot);
+    end;
+  end;
+  Result := Error = '';
+  if not Result then SuppressibleMsgBox(Error, mbError, MB_OK, IDOK);
+end;
 
 function HardwareDriverMissing: Boolean;
 begin
@@ -123,50 +246,92 @@ function InstallProcessCount(Directory: String): Integer;
 function UninstallProcessCount(Directory: String): Integer;
   external 'CB_CountApplicationProcesses@{app}\ClariBar.Maintenance.dll stdcall uninstallonly delayload';
 
+function ApplicationProcessCount: Integer;
+var
+  OtherCount: Integer;
+begin
+  if IsUninstaller then Result := UninstallProcessCount(ExpandConstant('{app}'))
+  else begin
+    Result := InstallProcessCount(ExpandConstant('{app}'));
+    if (PreviousAppDir <> '') and not SameDirectory(PreviousAppDir, ExpandConstant('{app}')) then begin
+      OtherCount := InstallProcessCount(PreviousAppDir);
+      if (Result < 0) or (OtherCount < 0) then Result := -1
+      else Result := Result + OtherCount;
+    end;
+  end;
+end;
+
 function RequestClariBarExit: Boolean;
 var
   Window: HWND;
   Attempt, Count, LastCount: Integer;
 begin
   Result := False;LastCount := -1;
-  Window := FindClariBarWindow('ClariBar.Host', 0);
-  if Window <> 0 then PostMessage(Window, RegisterClariBarMessage('ClariBar.Exit'), 0, 0);
-  for Attempt := 1 to 300 do begin
-    if IsUninstaller then Count := UninstallProcessCount(ExpandConstant('{app}'))
-    else Count := InstallProcessCount(ExpandConstant('{app}'));
-    if Count <> LastCount then begin
-      Log('Waiting for ClariBar processes: ' + IntToStr(Count));LastCount := Count;
+  try
+    Count := ApplicationProcessCount;
+    if Count > 0 then begin
+      Window := FindClariBarWindow('ClariBar.Host', 0);
+      if Window <> 0 then PostMessage(Window, RegisterClariBarMessage('ClariBar.Exit'), 0, 0);
     end;
-    if (Count = 0) and not CheckForMutexes('Local\ClariBar.UI') then begin
-      Result := True;
-      Break;
+    for Attempt := 1 to 300 do begin
+      Count := ApplicationProcessCount;
+      if Count <> LastCount then begin
+        Log('Waiting for ClariBar processes: ' + IntToStr(Count));LastCount := Count;
+      end;
+      if Count = 0 then begin
+        Result := True;
+        Break;
+      end;
+      if Count < 0 then Break;
+      Sleep(200);
     end;
-    Sleep(200);
+  finally
+    if IsUninstaller then UnloadDLL(ExpandConstant('{app}\ClariBar.Maintenance.dll'));
   end;
-  if IsUninstaller then UnloadDLL(ExpandConstant('{app}\ClariBar.Maintenance.dll'));
 end;
 
 procedure InitializeWizard;
 var
-  PreviousRoot: String;
+  PreviousRoot, DataDescription: String;
 begin
+  if (PreviousAppDir <> '') and (ExpandConstant('{param:DIR|}') = '') then
+    WizardForm.DirEdit.Text := PreviousAppDir;
+  if PreviousAppDir <> '' then DataDescription := CustomMessage('UpgradeDataDescription')
+  else DataDescription := CustomMessage('DataDescription');
   DataPage := CreateInputDirPage(wpSelectDir, CustomMessage('DataTitle'),
     CustomMessage('DataSubtitle'),
-    CustomMessage('DataDescription'), False, '');
+    DataDescription, False, '');
   DataPage.Add(CustomMessage('DataDirectory'));
   PreviousRoot := GetPreviousData('DataRoot', ExpandConstant('{localappdata}\ClariBar'));
-  DataPage.Values[0] := ExpandConstant('{param:DATAROOT|' + PreviousRoot + '}');
+  if PreviousAppDir <> '' then begin
+    DataPage.Values[0] := PreviousDataRoot;
+    DataPage.Edits[0].ReadOnly := True;
+    DataPage.Buttons[0].Enabled := False;
+  end else begin
+    DataPage.Values[0] := ExpandConstant('{param:DATAROOT|}');
+    if DataPage.Values[0] = '' then DataPage.Values[0] := PreviousRoot;
+  end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
   if CurPageID = DataPage.ID then begin
-    if (Length(DataPage.Values[0]) < 4) or not (DataPage.Values[0][2] = ':') then begin
+    if not IsLocalDirectory(DataPage.Values[0]) then begin
       MsgBox(CustomMessage('ChooseLocalPath'), mbError, MB_OK);
       Result := False;
     end;
   end;
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo,
+  MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := MemoDirInfo + NewLine + MemoGroupInfo;
+  if MemoTasksInfo <> '' then Result := Result + NewLine + NewLine + MemoTasksInfo;
+  if PreviousAppDir <> '' then
+    Result := Result + NewLine + NewLine + FmtMessage(CustomMessage('UpgradeSummary'), [PreviousVersion]) +
+      NewLine + Space + PreviousDataRoot;
 end;
 
 procedure RegisterPreviousData(PreviousDataKey: Integer);
@@ -175,9 +340,54 @@ begin
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ExitCode, Attempt: Integer;
+  UninstallLog, PreparingText: String;
 begin
   Result := '';
-  if not RequestClariBarExit then Result := CustomMessage('QuitBeforeInstall');
+  if not RequestClariBarExit then begin
+    Result := CustomMessage('QuitBeforeInstall');
+    Exit;
+  end;
+  if (PreviousAppDir = '') or PreviousRemoved then Exit;
+  UninstallLog := AddBackslash(PreviousDataRoot) + 'logs\upgrade-uninstall-' +
+    GetDateTimeString('yyyymmdd-hhnnss-zzz', '-', ':') + '.log';
+  if not ForceDirectories(ExtractFileDir(UninstallLog)) then begin
+    Result := CustomMessage('CannotSaveDataPath');
+    Exit;
+  end;
+  PreparingText := WizardForm.PreparingLabel.Caption;
+  WizardForm.PreparingLabel.Caption := CustomMessage('RemovingPrevious');
+  try
+    Log('Uninstalling previous ClariBar before installing new program files: ' + PreviousUninstaller);
+    if not Exec(PreviousUninstaller,
+      '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="' + UninstallLog + '"',
+      PreviousAppDir, SW_HIDE, ewWaitUntilTerminated, ExitCode) then begin
+      Log('Could not start previous uninstaller: ' + SysErrorMessage(ExitCode));
+      Result := FmtMessage(CustomMessage('PreviousUninstallFailed'), [IntToStr(ExitCode), UninstallLog]);
+      Exit;
+    end;
+    if ExitCode <> 0 then begin
+      Result := FmtMessage(CustomMessage('PreviousUninstallFailed'), [IntToStr(ExitCode), UninstallLog]);
+      Exit;
+    end;
+    { Inno's uninstaller clone may still be removing its original executable. }
+    for Attempt := 1 to 100 do begin
+      if not RegKeyExists(PreviousRegRoot, UninstallKey) and
+         not FileExists(PreviousUninstaller) then Break;
+      Sleep(100);
+    end;
+    if RegKeyExists(PreviousRegRoot, UninstallKey) or
+       ((PreviousOtherView <> 0) and RegKeyExists(PreviousOtherView, UninstallKey)) or
+       FileExists(PreviousUninstaller) or FileExists(PreviousAppDir + '\ClariBar.exe') then begin
+      Result := FmtMessage(CustomMessage('PreviousUninstallFailed'), ['cleanup', UninstallLog]);
+      Exit;
+    end;
+    PreviousRemoved := True;
+    Log('Previous ClariBar uninstall completed; runtime data retained at ' + PreviousDataRoot);
+  finally
+    WizardForm.PreparingLabel.Caption := PreparingText;
+  end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

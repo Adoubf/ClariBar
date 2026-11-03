@@ -38,8 +38,8 @@ Actual application pages. Click an image to view it at full size.
 ## Features
 
 - **Taskbar appearance:** follow Windows, use a transparent background, or apply a tint across multiple taskbars.
-- **Live monitoring:** CPU, GPU, memory, disk and network usage, plus temperatures, clocks and fan speeds exposed by your hardware.
-- **Embedded display:** place up to 8 metrics in the taskbar using a single line, two columns or two rows, with automatic width and click-through enabled by default.
+- **Live monitoring:** CPU, GPU, memory, disk and network usage, plus temperatures, clocks and fan speeds exposed by your hardware. **Total disk space usage** divides the combined used space of accessible local fixed disks by their combined capacity, counting each volume once.
+- **Embedded display:** place up to 8 metrics in the taskbar using a single line, two columns or two rows, with automatic width and click-through enabled by default. Use **Edit order** in Resource monitor or beside the taskbar preview to drag metrics or move them with arrow buttons. Changes save immediately and preserve each metric's name and color.
 - **Physical network uplink:** select the default physical route and exclude virtual, tunnel and loopback adapters.
 - **Fonts and colors:** per-metric colors, font selection, size, bold text, random colors and four color presets.
 - **System icon colors:** customize time, date, tray glyphs, network, volume, input method and battery indicators.
@@ -51,6 +51,7 @@ Actual application pages. Click an image to view it at full size.
 - **Pinned images:** convert clipboard images, text, basic HTML, color values or copied files into floating images. Zoom, rotate, mirror, adjust opacity, use thumbnails or click-through, organize groups, recover closed windows and restore the session after restarting. Animated GIFs support playback and frame stepping.
 - **OCR and shared AI configuration:** use installed Windows OCR languages by default, or configure an OCR, VL or multimodal model through an HTTP/HTTPS service on your computer, LAN or a remote server. OCR and translation share the connection and key, with separate model IDs and a connection test.
 - **Screenshot translation:** press **Ctrl + Alt + A** to select a region and show a bilingual comparison or translated text over the captured area. Chinese translates into English and English into Chinese automatically. Free online translation is the default; offline models download only after explicit opt-in. AI also supports manually chosen target languages.
+- **Translate on copy:** enabled by default. Copy text with **Ctrl + C**, a context-menu **Copy** command or an application’s **Copy** button to translate it in a compact popup below and to the right of the pointer, using the selected translation engine and languages. The popup preserves source-window focus, adapts to screen edges, and provides copy and retry actions. Disable it under **Desktop tools → Screenshot translation**.
 
 ## Download and install
 
@@ -60,7 +61,9 @@ Actual application pages. Click an image to view it at full size.
 
 Requires **Windows 11 x64**. The installer includes the .NET and Windows App SDK runtimes; development tools are not needed to run the app.
 
-Some CPU and motherboard temperatures and fan readings require hardware authorization in the app. The installer can optionally install the official PawnIO component. Upgrades preserve existing settings, and uninstalling preserves personal runtime data.
+Some CPU and motherboard temperatures and fan readings require hardware authorization in the app. The installer can optionally install the official PawnIO component.
+
+The installer detects an existing installation, closes ClariBar, uninstalls the previous program and then installs the new version. This also applies when reinstalling the same version. Upgrades reuse the existing runtime data directory and preserve settings, custom shortcuts, encrypted credentials, history, pinned images and downloaded models, including when you choose a different program directory. Uninstalling also keeps personal runtime data.
 
 Current builds are unsigned installation previews. Each Release includes a SHA-256 checksum file; use PowerShell `Get-FileHash` to verify a download.
 
@@ -68,7 +71,7 @@ Version **0.83** fixes the Close button staying red after restoring settings fro
 
 ## Quick start
 
-1. Choose a background style in **Taskbar** and enable embedded monitoring.
+1. Choose **Use style** or **Use opacity** in **Taskbar** and enable embedded monitoring. The two background controls are mutually exclusive.
 2. Select and pin up to 8 metrics in **Resource monitor**.
 3. Adjust layout, colors, fonts and text size in **Text & icons**, using the live preview.
 4. Select a language in **General**, or leave it set to **Follow system**.
@@ -89,7 +92,7 @@ Desktop tools are available from settings and the tray menu. Their global shortc
 | Not assigned | Toggle mouse click-through (optional) |
 | Not assigned | Delayed capture (optional) |
 
-The capture and paste shortcuts follow Snipaste. Close Snipaste or disable its global hotkeys before switching to ClariBar with the same keys. Windows error 1409 means a shortcut is already in use; settings explain the conflict and offer **Retry shortcuts**. Leave an individual shortcut blank to disable it, or use **Use Snipaste shortcuts** to reapply the preset. Existing custom shortcuts are preserved during migration.
+The capture and paste shortcuts follow Snipaste. Close Snipaste or disable its global hotkeys before switching to ClariBar with the same keys. Windows error 1409 means a shortcut is already in use; settings explain the conflict and offer **Retry shortcuts**. Edit each shortcut directly, or leave it blank to disable it. Existing custom shortcuts are preserved during migration.
 
 During capture, releasing the mouse keeps the selection open for adjustment and annotation:
 
@@ -134,9 +137,15 @@ Enter a server root, `/v1`, `/v1beta` or a complete API endpoint; settings previ
 
 Model IDs are freely editable. OCR models such as **PaddleOCR-VL** and **DeepSeek-OCR**, **VL models** and **general multimodal models** can connect through these APIs. Automatic model selection supplies the documented OCR prompts for PaddleOCR-VL and DeepSeek-OCR; a custom prompt and request timeout are also available. The server must support image input using the selected API format.
 
+AI OCR displays recognized text as the service streams it. If streaming is unsupported, it falls back to the complete response. Interrupted requests keep the text already received. Local OCR returns the completed result. Screenshot selection uses a frozen desktop cover until the first rendered frame is ready; dragging updates geometry without repeatedly cropping and uploading the image.
+
 **Test connection** sends a built-in sample image using the current fields and displays the API/model, elapsed time and recognized text. It distinguishes successful image recognition from a connected service that returns unexpected text, and reports authentication, endpoint, network, certificate and timeout errors. Testing does not save changes; use **Save AI settings** when ready. API keys are encrypted for the current Windows account and are excluded from diagnostics.
 
 ### Screenshot translation
+
+**Translate on copy** adds a text workflow alongside region capture. When enabled, copying text with `Ctrl+C`, a context menu or a Copy button in another application opens a small translation card beside the pointer. The original clipboard contents remain available for pasting. Consecutive copies update the same card and cancel the previous request. Left- or right-click outside the card, press `Esc`, or move the pointer well away to dismiss it. Brief nearby movements, entering the card and dragging a text selection keep it open. Copying the result does not translate it again. This workflow reads copied text directly and does not require OCR. It uses the engine and language preferences below; online engines send that text to the selected service. Existing clipboard contents are not translated when the feature is enabled. File copies, images without text, empty content, copies made by ClariBar and content explicitly excluded from clipboard monitoring are ignored. Browser clipboard formats that render on demand trigger a single translation.
+
+Translation appears progressively in both workflows. AI services that support streaming display text as it arrives; other services display each completed paragraph. The screenshot overlay updates the corresponding source areas and leaves pending areas visible. Paragraphs keep their original order even when replies arrive out of order. Interrupted requests retain received text with an error and a retry option. Free online translation updates after each response; the optional offline worker returns the completed result and loads the model once per request.
 
 Press **Ctrl + Alt + A**, then click a window or drag a region. Choose the default engine and display mode under **Desktop tools → Screenshot translation**. The bilingual window shows source and translated text side by side and stacks them in a narrow window. The overlay covers the original captured region, with a nearby toolbar for viewing the original, copying the translation, closing, or returning to bilingual comparison. Switching views reuses the current result. The target defaults to **Automatic (Chinese ↔ English)**: Chinese screenshots translate into English, and English screenshots into Chinese. Each capture determines the direction again. You can choose a fixed target or enter another language for AI.
 
@@ -163,7 +172,7 @@ ClariBar.exe --quit
 
 ## Versioning
 
-Feature updates change the first decimal place (`0.7` → `0.8`). Refinements and fixes change the second (`0.71` → `0.72`). The current preview is **0.83**. `Version.props` supplies the version for the app, build scripts and installer.
+Feature updates change the first decimal place (`0.7` → `0.8`). Refinements and fixes change the second (`0.71` → `0.72`). The source version is **0.83**; the latest published release is linked above. `Version.props` supplies the version for the app, build scripts and installer.
 
 ## Build from source
 
@@ -192,7 +201,7 @@ You can also open `ClariBar.slnx` in Visual Studio. By default, build outputs, c
 .\scripts\package.ps1 -PawnIOInstaller ".\PawnIO_setup.exe"
 ```
 
-The script builds the application, publishes self-contained runtimes and creates the installer. It locates Inno Setup in the development directory or a standard installation; use `-InnoCompiler` to provide a different `ISCC.exe` path. Output appears under `artifacts/ClariBar/releases/` in the development directory.
+The script builds the application and creates a self-contained installer. The UI and sensor broker share one app-local .NET runtime; they run as independent processes and do not require a system .NET installation. Packaging checks that shared dependencies match and rebuilds staging to exclude stale files. It locates Inno Setup in the development directory or a standard installation; use `-InnoCompiler` to provide a different `ISCC.exe` path. Output appears under `artifacts/ClariBar/releases/` in the development directory.
 
 ## Project structure
 
@@ -211,7 +220,7 @@ The script builds the application, publishes self-contained runtimes and creates
 
 ## Compatibility
 
-- Taskbar integration depends on Windows 11 internal controls. Windows updates and other taskbar customization tools can affect compatibility.
+- Taskbar embedding detects the tray layout at runtime, including horizontal StackPanel hosts, Grid hosts with explicit or implicit columns, and shared ancestor layouts. It does not use a Windows build allowlist. Windows updates and other taskbar customization tools can still change internal controls. A connection can support styling while monitor embedding is unavailable; the Taskbar page reports this separately and offers diagnostic export with OS/Explorer details and the visual tree.
 - Sensor availability depends on hardware, drivers and access permissions. Missing readings are never substituted with data from another sensor.
 - System colors apply to supported text, glyphs and vector icons. Third-party color tray bitmaps are not recolored.
 - Hardware monitoring is read-only; ClariBar does not control fan speeds, voltages or power.

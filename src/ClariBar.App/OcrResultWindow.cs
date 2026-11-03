@@ -10,15 +10,21 @@ internal sealed class OcrResultWindow : Window
     private readonly DesktopToolsController tools;
     private readonly PixelFrame frame;
     private readonly CancellationTokenSource cancellation = new();
+    private readonly System.Net.Http.HttpMessageHandler? transport;
+    private readonly DispatcherTimer streamTimer=new(){Interval=TimeSpan.FromMilliseconds(60)};
+    private string? pendingText;
+    internal int StreamingEvents {get;private set;}
+    internal int ProgressiveRenders {get;private set;}
     private readonly TextBox result = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, PlaceholderText = L.T("Recognized text appears here. You can edit it before copying."), HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
     private readonly TextBlock status = ToolUi.Label("");
     private readonly ProgressRing progress = new() { Width = 22, Height = 22, Visibility = Visibility.Collapsed };
     private readonly ComboBox languages;
     private bool running, closed,initialStarted;
     internal Task InitialRecognition {get;private set;}=Task.CompletedTask;
-    public OcrResultWindow(DesktopToolsController tools, PixelFrame frame)
+    public OcrResultWindow(DesktopToolsController tools, PixelFrame frame,System.Net.Http.HttpMessageHandler? transport=null)
     {
-        this.tools = tools; this.frame = frame;
+        this.tools = tools; this.frame = frame;this.transport=transport;
+        streamTimer.Tick+=(_,_)=>FlushProgress();
         var root = new Grid { Padding = new(20), RowSpacing = 12, Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"] };
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = new GridLength(1, GridUnitType.Star) }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
         root.Children.Add(ToolUi.Label(L.T("Extract text"), 24));
@@ -50,7 +56,7 @@ internal sealed class OcrResultWindow : Window
             if(initialStarted)return;initialStarted=true;
             InitialRecognition=RecognizeAsync(tools.Settings.OcrDefaultEngine=="Ai");await InitialRecognition;
         };
-        Closed += (_, _) => { closed = true; cancellation.Cancel(); };
+        Closed += (_, _) => { closed = true;streamTimer.Stop();pendingText=null;cancellation.Cancel(); };
     }
     private async Task ConfirmAiAsync()
     {
@@ -68,15 +74,24 @@ internal sealed class OcrResultWindow : Window
         if(useAi && (string.IsNullOrWhiteSpace(tools.Settings.AiOcrEndpoint) || string.IsNullOrWhiteSpace(tools.Settings.AiOcrModel)))
         {status.Text=L.T("Configure an AI endpoint and model on Desktop tools first.");return;}
         running = true; progress.IsActive = true; progress.Visibility = Visibility.Visible; languages.IsEnabled = false;
+        streamTimer.Stop();pendingText=null;StreamingEvents=ProgressiveRenders=0;result.IsReadOnly=useAi;if(useAi)result.Text="";
         status.Text = L.T(useAi ? "Recognizing with AI…" : "Recognizing locally…");
         try
         {
-            if (useAi) { result.Text = await OcrService.AiAsync(frame, ClariBar.Core.AiOcrOptions.From(tools.Settings), OcrCredential.Read(), cancellation.Token); status.Text = L.T("AI OCR complete"); }
-            else { var output = await OcrService.LocalAsync(frame, tools.Settings.OcrLanguage, cancellation.Token); result.Text = output.Text; status.Text = L.F("Local OCR · {0}", output.Language); }
+            if (useAi)
+            {
+                var queue=DispatcherQueue;
+                string text=await OcrService.AiAsync(frame,ClariBar.Core.AiOcrOptions.From(tools.Settings),OcrCredential.Read(),cancellation.Token,
+                    received:value=>queue.TryEnqueue(()=>{if(closed || !running)return;StreamingEvents++;pendingText=value;if(!streamTimer.IsEnabled)streamTimer.Start();}),handler:transport);
+                if(closed)return;streamTimer.Stop();pendingText=null;result.Text=text;status.Text=L.T("AI OCR complete");
+            }
+            else { var output = await OcrService.LocalAsync(frame, tools.Settings.OcrLanguage, cancellation.Token);if(closed)return;result.Text = output.Text; status.Text = L.F("Local OCR · {0}", output.Language); }
             if (string.IsNullOrWhiteSpace(result.Text)) status.Text = L.T("No text was found. Try a larger region or another language.");
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!closed) status.Text = ex.Message; }
-        finally { running = false; if (!closed) { progress.IsActive = false; progress.Visibility = Visibility.Collapsed; languages.IsEnabled = true; } }
+        catch (Exception ex) { if (!closed){FlushProgress();status.Text=(useAi && result.Text.Length>0?L.T("Recognition interrupted. Received text is kept.")+"\n":"")+ex.Message;} }
+        finally { running = false;streamTimer.Stop();pendingText=null;if (!closed) { result.IsReadOnly=false;progress.IsActive = false; progress.Visibility = Visibility.Collapsed; languages.IsEnabled = true; } }
     }
+    private void FlushProgress()
+    {streamTimer.Stop();if(closed || pendingText is null)return;result.Text=pendingText;pendingText=null;ProgressiveRenders++;}
 }

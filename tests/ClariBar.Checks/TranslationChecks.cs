@@ -7,6 +7,23 @@ internal static class TranslationChecks
     internal static void Run(Action<bool,string> require)
     {
         var settings=JsonSerializer.Deserialize<AppSettings>("{\"aiOcrEndpoint\":\"http://local:8000/v1\",\"aiOcrModel\":\"vision\"}",Wire.Json)!;settings.Normalize();
+        require(settings.CopyTranslationEnabled && !JsonSerializer.Deserialize<AppSettings>("{\"copyTranslationEnabled\":false}",Wire.Json)!.CopyTranslationEnabled,"Copy translation defaults on for existing settings and preserves an explicit opt-out");
+        require(CopyTranslation.HasText("Hello 世界") && !CopyTranslation.HasText(" 1234 \r\n") && !CopyTranslation.HasText(null),"Copy translation accepts words and ignores empty or numeric clipboard content");
+        require(CopyTranslation.Place(new(0,0,1920,1040),100,200,344,300,12)==new PixelRect(112,212,344,300),"Copy translation appears below and to the right of the copy pointer");
+        var edge=CopyTranslation.Place(new(-1920,-200,1920,1040),-10,830,344,500,12);
+        require(edge==new PixelRect(-366,318,344,500) && edge.Intersect(new(-1920,-200,1920,1040))==edge,"The copy popup flips at screen edges and respects negative monitor coordinates");
+        require(CopyTranslation.Place(new(0,0,200,180),190,170,344,500,12)==new PixelRect(0,0,200,180),"The copy popup fits an unusually small work area without invalid bounds");
+        var dismissal=new CopyPopupDismissal();var card=new PixelRect(112,212,344,300);
+        require(!dismissal.Observe(card,100,200,95,195,1,false,0) && !dismissal.Observe(card,100,200,450,500,1,false,10000),"Pointer jitter near the copy point and travel into the full card preserve the popup");
+        require(!dismissal.Observe(card,100,200,900,800,1,false,10001) && !dismissal.Observe(card,100,200,900,800,1,false,10250) && dismissal.Observe(card,100,200,900,800,1,false,10251),"Moving far away dismisses after 250 milliseconds, including a single jump followed by a stationary pointer");
+        dismissal.Reset();dismissal.Observe(card,100,200,900,800,1,false,0);
+        require(!dismissal.Observe(card,100,200,100,200,1,false,200) && !dismissal.Observe(card,100,200,900,800,1,false,250) && !dismissal.Observe(card,100,200,900,800,1,false,499),"Returning nearby resets the grace interval instead of closing on a brief excursion");
+        require(!dismissal.Observe(card,100,200,900,800,1,true,500) && !dismissal.Observe(card,100,200,900,800,1,true,9000),"Dragging a text selection beyond the popup never dismisses while the button is held");
+        require(!dismissal.Observe(card,100,200,900,800,1,false,9001) && dismissal.Observe(card,100,200,900,800,1,false,9251),"Releasing a selection outside starts a fresh grace interval");
+        dismissal.Reset();var scaledCard=new PixelRect(-1800,-900,688,600);
+        require(!dismissal.Observe(scaledCard,-1824,-924,-1000,-850,2,false,0) && !dismissal.Observe(scaledCard,-1824,-924,-1000,-850,2,false,1000),"The movement margin follows monitor DPI and supports negative screen coordinates");
+        require(!dismissal.Observe(scaledCard,-1824,-924,-700,-850,2,false,1001) && dismissal.Observe(scaledCard,-1824,-924,-700,-850,2,false,1251),"A distant pointer still dismisses on a high DPI monitor");
+        dismissal.Reset();require(!dismissal.Observe(card,100,200,900,800,1,false,100000),"A new copy resets any previous movement timeout");
         require(settings.TranslationHotkey=="Ctrl+Alt+A" && settings.TranslationEngine=="Free" && !settings.OfflineTranslationEnabled,"Existing settings gain free translation and Ctrl+Alt+A without enabling model downloads");
         require(settings.AiOcrEndpoint=="http://local:8000/v1" && settings.AiOcrModel=="vision","Shared AI configuration preserves the existing OCR service and model");
         require(settings.TranslationTargetLanguage=="Auto" && TranslationProtocol.NormalizeLanguage("",false)=="Auto","New or blank target language settings default to automatic Chinese-English translation");

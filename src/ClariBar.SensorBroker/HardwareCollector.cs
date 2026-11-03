@@ -14,6 +14,7 @@ internal sealed class HardwareCollector : IDisposable
     };
     private bool opened;
     private readonly NetworkCollector network=new();
+    private readonly DiskSpaceCollector diskSpace=new();
 
     public SensorSnapshot Read(bool elevated)
     {
@@ -27,6 +28,7 @@ internal sealed class HardwareCollector : IDisposable
         catch (Exception ex) { errors.Add(L.F("Hardware access: {0}", ex.Message)); }
         try{sensors.AddRange(network.Read());}
         catch(Exception ex){errors.Add(L.F("Network uplink: {0}", ex.Message));}
+        sensors.Add(diskSpace.Read());
         return new SensorSnapshot(SensorSnapshot.ProtocolVersion, DateTimeOffset.UtcNow, elevated,
             errors.Count == 0 ? "ready" : "partial", sensors.ToArray(), errors.ToArray())
         {Network=network.Route,Capabilities=SensorCatalog.Capabilities(sensors)};

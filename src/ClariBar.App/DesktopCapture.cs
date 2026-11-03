@@ -151,6 +151,7 @@ internal static partial class DesktopCapture
     [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint obj);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint obj);
     [DllImport("gdi32.dll")] private static extern bool BitBlt(nint dc, int x, int y, int width, int height, nint source, int sx, int sy, uint operation);
+    [DllImport("gdi32.dll")] internal static extern bool GdiFlush();
     [DllImport("gdi32.dll")] private static extern nint CreatePen(int style, int width, uint color);
     [DllImport("gdi32.dll")] private static extern nint GetStockObject(int index);
     [DllImport("gdi32.dll")] private static extern bool MoveToEx(nint dc, int x, int y, nint previous);
@@ -184,6 +185,8 @@ internal static partial class DesktopCapture
         using var surface = new Surface(bounds.Width, bounds.Height); nint screen = GetDC(0);
         try { if (screen == 0 || !BitBlt(surface.Dc, 0, 0, bounds.Width, bounds.Height, screen, bounds.X, bounds.Y, 0x40CC0020)) throw new IOException(Localizer.T("Could not capture the desktop.")); }
         finally { if (screen != 0) ReleaseDC(0, screen); }
+        // CreateDIBSection requires GDI synchronization before direct pixel access.
+        GdiFlush();
         byte[] data = new byte[checked(bounds.Width * bounds.Height * 4)]; Marshal.Copy(surface.Bits, data, 0, data.Length);
         for (int i = 3; i < data.Length; i += 4) data[i] = 255;
         return new(bounds.Width, bounds.Height, data);
@@ -217,6 +220,7 @@ internal static partial class DesktopCapture
             var box = PixelRect.Between((int)a.X, (int)a.Y, (int)b.X, (int)b.Y).Intersect(original.Bounds);
             if (mark.Tool == "Mosaic")
             {
+                GdiFlush();
                 Marshal.Copy(surface.Bits, pixels, 0, pixels.Length);
                 const int block = 12;
                 for (int y = box.Y; y < box.Bottom; y += block) for (int x = box.X; x < box.Right; x += block)
@@ -254,7 +258,7 @@ internal static partial class DesktopCapture
             }
             finally { SelectObject(surface.Dc, oldPen); DeleteObject(pen); }
         }
-        SelectObject(surface.Dc, oldBrush); Marshal.Copy(surface.Bits, pixels, 0, pixels.Length);
+        SelectObject(surface.Dc, oldBrush); GdiFlush(); Marshal.Copy(surface.Bits, pixels, 0, pixels.Length);
         for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
         return new(original.Width, original.Height, pixels);
     }

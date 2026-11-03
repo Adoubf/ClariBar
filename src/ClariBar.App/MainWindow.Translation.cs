@@ -9,6 +9,15 @@ public sealed partial class MainWindow
 {
     private CancellationTokenSource? offlineDownload;
     private ComboBox? translationEngine,translationDisplay,translationSource,translationTarget;
+    private int copyTranslationError;
+    private InfoBar? copyTranslationNotice;
+    private void ConfigureCopyTranslation()
+    {
+        if(!nativeReady)return;
+        copyTranslationError=Native.CB_SetCopyTranslation(settings.CopyTranslationEnabled && !smokeTest?1:0);
+        if(!settings.CopyTranslationEnabled)desktopTools.CancelCopyTranslation();
+        if(copyTranslationNotice is not null){copyTranslationNotice.IsOpen=copyTranslationError!=0;copyTranslationNotice.Message=L.F("Copy translation could not start ({0}).",copyTranslationError);}
+    }
     private void SynchronizeTranslationPreferences()
     {
         if(page!="tools")return;
@@ -20,6 +29,9 @@ public sealed partial class MainWindow
     private void BuildTranslationSettings()
     {
         Heading(L.T("Screenshot translation"));
+        Row(L.T("Translate on copy"),L.T("Copy text using Ctrl + C, a context menu or a Copy button to translate it beside the pointer. Uses the translation engine and languages selected below. Online engines send copied text to their service."),
+            Toggle(settings.CopyTranslationEnabled,value=>{settings.CopyTranslationEnabled=value;Save();ConfigureCopyTranslation();}));
+        copyTranslationNotice=Notice(L.T("Translate on copy"),L.F("Copy translation could not start ({0}).",copyTranslationError),InfoBarSeverity.Warning);copyTranslationNotice.IsOpen=copyTranslationError!=0;
         translationEngine=new(){ItemsSource=new[]{L.T("Free online (MyMemory)"),L.T("Offline Chinese ↔ English"),L.T("AI translation")},SelectedIndex=settings.TranslationEngine switch{"Local"=>1,"Ai"=>2,_=>0},MinWidth=210};
         translationEngine.SelectionChanged+=(_,_)=>{settings.TranslationEngine=translationEngine.SelectedIndex switch{1=>"Local",2=>"Ai",_=>"Free"};Save();};
         Row(L.T("Translation engine"),L.T("Free online is the default and needs no API key. It sends recognized text to MyMemory (5,000 characters/day under its current free policy). AI uses the shared configuration below."),translationEngine);
