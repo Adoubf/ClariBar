@@ -33,7 +33,7 @@ Actual application pages. Click an image to view it at full size.
 
 | Screenshot translation · Bilingual | Screenshot translation · Overlay |
 | --- | --- |
-| ![Bilingual screenshot translation](assets/screenshots/en-US/translation-bilingual.png) | ![Translation over the captured region](assets/screenshots/en-US/translation-overlay.png) |
+| ![Bilingual screenshot translation](assets/screenshots/en-US/translation-bilingual.png) | ![Translated text over the captured region with the floating action toolbar](assets/screenshots/en-US/translation-overlay-example.png) |
 
 ## Features
 

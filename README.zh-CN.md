@@ -33,7 +33,7 @@ ClariBar 是一款面向 Windows 11 的任务栏美化与桌面工具，提供�
 
 | 截图翻译 · 双语对照 | 截图翻译 · 区域覆盖 |
 | --- | --- |
-| ![截图翻译双语对照](assets/screenshots/zh-CN/translation-bilingual.png) | ![原截图区域覆盖译文](assets/screenshots/zh-CN/translation-overlay.png) |
+| ![截图翻译双语对照](assets/screenshots/zh-CN/translation-bilingual.png) | ![原截图区域覆盖译文及悬浮操作栏](assets/screenshots/zh-CN/translation-overlay-example.png) |
 
 ## 功能
 
